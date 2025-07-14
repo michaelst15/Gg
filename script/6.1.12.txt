@@ -1,0 +1,105 @@
+#!/bin/bash
+ 
+# === Metadata CIS ===
+judul="6.1.12 Ensure no ungrouped files or directories exist (Automated)"
+deskripsi="Kadang-kadang saat administrator menghapus grup dari sistem, mereka lupa untuk mengubah kepemilikan file yang terkait. File ini akan menjadi ungrouped dan berisiko memberikan akses tak sengaja kepada grup baru yang menggunakan ID lama."
+nilai_cis="Tidak boleh ada file atau direktori dengan grup yang tidak dikenal pada sistem."
+ 
+# === File log hasil ===
+output_file="remediation_result.txt"
+ 
+# === Lokasi backup untuk group ID ===
+backup_dir="/var/backups/ownership_backup"
+mkdir -p "$backup_dir"
+backup_file="$backup_dir/ungrouped_ownership_backup_$(date +%F-%H%M%S).txt"
+ 
+# === Lokasi file manual ===
+manual_dir="/var/tmp"  # GANTI jika file manual ada di lokasi lain
+manual_backup_dir="/var/backups/manual_lists"
+mkdir -p "$manual_backup_dir"
+ 
+# === Inisialisasi log ===
+total_diperbaiki=0
+total_diabaikan=0
+total_gagal=0
+declare -a file_diabaikan
+declare -a file_gagal
+ 
+echo "🔍 Mencari file ungrouped di seluruh filesystem lokal..."
+ 
+# Cari semua file ungrouped
+mapfile -t file_ungrouped < <(df --local -P | awk 'NR>1 {print $6}' | xargs -I '{}' find '{}' -xdev -nogroup 2>/dev/null)
+ 
+# Proses setiap file ungrouped
+for file in "${file_ungrouped[@]}"; do
+    [[ ! -e "$file" || -L "$file" ]] && continue
+    owner_write=$(stat -c "%A" "$file" | cut -c3)
+ 
+    if [[ "$owner_write" == "w" ]]; then
+        group_id=$(stat -c "%g" "$file")
+        echo "$file $group_id" >> "$backup_file"
+ 
+        if chgrp root "$file"; then
+            ((total_diperbaiki++))
+        else
+            echo "❌ Gagal chgrp root pada: $file" >> "$output_file"
+            file_gagal+=("$file")
+            ((total_gagal++))
+        fi
+    else
+        file_diabaikan+=("$file")
+        ((total_diabaikan++))
+    fi
+done
+ 
+# === Backup & kosongkan file manual ===
+timestamp=$(date +%F-%H%M%S)
+for manual_file in UNGRP-Files.txt WWF-Files.txt; do
+    full_path="$manual_dir/$manual_file"
+    echo "🔎 Memproses file manual: $full_path"
+ 
+    if [[ -f "$full_path" ]]; then
+        cp "$full_path" "$manual_backup_dir/${manual_file%.txt}_$timestamp.txt"
+        truncate -s 0 "$full_path"
+        echo "✅ File $manual_file dibackup dan dikosongkan."
+    else
+        echo "⚠️ File $manual_file tidak ditemukan di $manual_dir." >> "$output_file"
+    fi
+done
+ 
+# === Simpan laporan remediasi ===
+{
+    echo -e "$judul\n"
+    echo -e "Tindakan Remediasi:"
+    echo -e "1. Total file ungrouped ditemukan: ${#file_ungrouped[@]}"
+    echo -e "2. File yang dikoreksi (chgrp root): $total_diperbaiki"
+    echo -e "3. File yang diabaikan karena owner tidak punya write: $total_diabaikan"
+    echo -e "4. File yang gagal diubah: $total_gagal"
+    echo -e "5. Backup group ID disimpan di: $backup_file"
+ 
+    if [[ $total_diperbaiki -gt 0 ]]; then
+        echo -e "\n📁 Daftar file yang dikoreksi:"
+        cut -d' ' -f1 "$backup_file"
+    fi
+ 
+    if [[ $total_diabaikan -gt 0 ]]; then
+        echo -e "\n⚠️ File yang diabaikan (owner tidak punya write):"
+        for f in "${file_diabaikan[@]}"; do echo "$f"; done
+    fi
+ 
+    if [[ $total_gagal -gt 0 ]]; then
+        echo -e "\n❌ File yang gagal diubah:"
+        for f in "${file_gagal[@]}"; do echo "$f"; done
+    fi
+ 
+    echo -e "\nDeskripsi:\n$deskripsi"
+    echo -e "Nilai CIS:\n$nilai_cis"
+    echo -e "================================================================================"
+} >> "$output_file"
+ 
+# === Ringkasan ke layar ===
+echo "✅ Remediasi selesai. Hasil dicatat di: $output_file"
+[[ -s "$backup_file" ]] && echo "📦 Backup group ownership disimpan di: $backup_file"
+[[ $total_diabaikan -gt 0 ]] && echo "⚠️ $total_diabaikan file diabaikan karena tidak punya owner write."
+[[ $total_gagal -gt 0 ]] && echo "❌ $total_gagal file gagal diperbaiki."
+echo "📂 File manual UNGRP-Files.txt dan WWF-Files.txt telah dibackup & dikosongkan di: $manual_backup_dir"
