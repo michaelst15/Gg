@@ -263,7 +263,10 @@ nilai_cis="File /etc/ssh/sshd_config harus memiliki baris: KexAlgorithms diffie-
 sshd_config="/etc/ssh/sshd_config"
 timestamp=$(date +%F-%H%M%S)
 backup_config="/etc/ssh/sshd_config.bak.$timestamp"
-kex_algorithms="diffie-hellman-group-exchange-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha256"
+# kex_algorithms="diffie-hellman-group-exchange-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha256"
+kex_algorithms="diffie-hellman-group14-sha1,diffie-hellman-group-exchange-sha1"
+
+
 
 # === Cek hak akses tulis ===
 if [[ ! -w "$sshd_config" ]]; then
@@ -276,6 +279,7 @@ cp "$sshd_config" "$backup_config" && echo "📦 Backup disimpan di: $backup_con
 
 # === Ambil konfigurasi lama (jika ada) ===
 old_kex=$(grep -Ei '^\s*#*\s*KexAlgorithms' "$sshd_config")
+
 
 # === Hapus entri lama ===
 sed -i '/^\s*#*\s*KexAlgorithms\b.*/Id' "$sshd_config"
