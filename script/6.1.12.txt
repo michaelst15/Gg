@@ -2,123 +2,72 @@
 
 #!/bin/bash
 
-judul="6.1.12 Ensure no ungrouped files or directories exist (Automated)"
-deskripsi="Memastikan tidak ada file dengan grup tidak dikenal (tanpa entry di /etc/group)."
-nilai_cis="Tidak boleh ada file atau direktori dengan grup yang tidak dikenal pada sistem."
-
+# === Metadata ===
 output_file="remediation_result.txt"
-backup_dir="/var/backups/gid_fix"
-mkdir -p "$backup_dir"
-backup_file="$backup_dir/backup_ungrouped_$(date +%F-%H%M%S).txt"
+judul="Judul Audit: 5.3.16 Ensure only strong Key Exchange algorithms are used"
+deskripsi="Algoritma pertukaran kunci (Key Exchange) yang lemah dapat menyebabkan kerentanan terhadap serangan man-in-the-middle."
+nilai_cis="File /etc/ssh/sshd_config harus memiliki baris: KexAlgorithms diffie-hellman-group-exchange-sha256,..."
 
-manual_dir="/tmp"
-manual_backup_dir="/var/backups/manual_lists"
-mkdir -p "$manual_backup_dir"
+sshd_config="/etc/ssh/sshd_config"
+timestamp=$(date +%F-%H%M%S)
+backup_config="/etc/ssh/sshd_config.bak.$timestamp"
 
-total_fixed=0
-total_failed=0
-total_manual=0
-declare -a file_failed
-declare -a file_ungrouped
+# Daftar algoritma kuat
+kex_algorithms="diffie-hellman-group-exchange-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha256"
 
-# Validasi grup root tersedia
-if ! getent group root >/dev/null; then
-  echo "❌ Grup 'root' tidak ditemukan di sistem." | tee -a "$output_file"
+# === Cek hak akses tulis ===
+if [[ ! -w "$sshd_config" ]]; then
+  echo "❌ Tidak memiliki izin menulis ke $sshd_config."
   exit 1
 fi
 
-echo "🔍 Memindai filesystem lokal untuk file dengan grup tidak dikenal..."
+# === Backup konfigurasi ===
+cp "$sshd_config" "$backup_config" && echo "📦 Backup disimpan di: $backup_config"
 
-mapfile -t mount_points < <(df --local -P | awk 'NR>1 {print $6}')
+# === Ambil entri lama ===
+old_kex=$(grep -Ei '^\s*#*\s*KexAlgorithms' "$sshd_config")
 
-for mp in "${mount_points[@]}"; do
-  while IFS= read -r path; do
-    [[ -e "$path" || -L "$path" ]] && file_ungrouped+=("$path")
-  done < <(find "$mp" -xdev -nogroup 2>/dev/null)
-done
+# === Hapus entri lama ===
+sed -i '/^\s*#*\s*KexAlgorithms\b.*/Id' "$sshd_config"
 
-for file in "${file_ungrouped[@]}"; do
-  [[ ! -e "$file" && ! -L "$file" ]] && continue
+# === Tambahkan entri baru ===
+echo -e "\n# CIS 5.3.16: Set strong Key Exchange algorithms only" >> "$sshd_config"
+echo "KexAlgorithms $kex_algorithms" >> "$sshd_config"
 
-  mount_point=$(df -P "$file" | awk 'NR==2 {print $6}')
-  mount_opts=$(mount | grep "on ${mount_point} " | head -n1)
+# === Validasi sshd config secara global ===
+sshd_test_output=$(sshd -t -f "$sshd_config" 2>&1)
+if [[ -n "$sshd_test_output" ]]; then
+  echo -e "❌ Validasi sshd gagal:\n$sshd_test_output"
+  echo "⏪ Mengembalikan konfigurasi dari backup."
+  cp "$backup_config" "$sshd_config"
+  exit 1
+fi
 
-  if echo "$mount_opts" | grep -q '\bro\b'; then
-    echo "⚠️  Lewati (read-only FS): $file" >> "$output_file"
-    file_failed+=("$file")
-    ((total_failed++))
-    continue
-  fi
+# === Cek algoritma yang benar-benar digunakan oleh sshd ===
+actual_kex=$(sshd -T | grep kexalgorithms | awk '{$1=""; print $0}' | xargs)
 
-  stat_info_before=$(stat -c "%U %G %u %g %n" "$file" 2>/dev/null)
-  echo "[BEFORE] $stat_info_before" >> "$backup_file"
+# === Set permission aman ===
+chmod 600 "$sshd_config"
 
-  # Perbaikan
-  if chgrp root "$file" 2>>"$output_file"; then
-    current_gid=$(stat -c "%g" "$file")
-    current_group=$(stat -c "%G" "$file")
-    stat_info_after=$(stat -c "%U %G %u %g %n" "$file")
-
-    if [[ "$current_gid" -eq 0 && "$current_group" == "root" ]]; then
-      echo "[AFTER]  $stat_info_after" >> "$backup_file"
-      ((total_fixed++))
-    else
-      echo "❌ Validasi gagal: Masih bukan root [$file]" >> "$output_file"
-      echo "[AFTER]  $stat_info_after" >> "$backup_file"
-      file_failed+=("$file")
-      ((total_failed++))
-    fi
-  else
-    echo "❌ chgrp gagal pada: $file" >> "$output_file"
-    file_failed+=("$file")
-    ((total_failed++))
-  fi
-done
-
-# Tangani file manual
-timestamp=$(date +%F-%H%M%S)
-for manual_file in UNGRP-Files.txt WWF-Files.txt; do
-  full_path="$manual_dir/$manual_file"
-  echo "🔄 Proses manual: $full_path"
-
-  if [[ -f "$full_path" ]]; then
-    cp "$full_path" "$manual_backup_dir/${manual_file%.txt}_$timestamp.txt"
-    truncate -s 0 "$full_path"
-    echo "☑️  $manual_file dibackup & dikosongkan." >> "$output_file"
-    ((total_manual++))
-  else
-    echo "⚠️  File tidak ditemukan: $manual_file" >> "$output_file"
-  fi
-done
-
-# Ringkasan
+# === Simpan hasil ===
 {
-  echo "=============================================="
-  echo "$judul"
-  echo ""
-  echo "🧾 Ringkasan Remediasi:"
-  echo "  • Total file ungrouped ditemukan : ${#file_ungrouped[@]}"
-  echo "  • Total berhasil diperbaiki      : $total_fixed"
-  echo "  • Total gagal diperbaiki         : $total_failed"
-  echo "  • File manual diproses           : $total_manual"
-  echo "  • Backup GID disimpan di         : $backup_file"
-  echo ""
-
-  if [[ $total_failed -gt 0 ]]; then
-    echo "✘ Daftar file gagal diperbaiki:"
-    for f in "${file_failed[@]}"; do echo "  - $f"; done
-  fi
-
-  echo ""
-  echo -e "📘 Deskripsi:\n$deskripsi"
-  echo -e "📋 Nilai CIS:\n$nilai_cis"
-  echo "=============================================="
+echo -e "$judul\n"
+echo -e "Tindakan Remediasi:\n"
+echo -e "1. Backup konfigurasi: $backup_config"
+[[ -n "$old_kex" ]] && echo -e "2. Entri lama:\n$old_kex" || echo "2. Tidak ditemukan entri lama."
+echo -e "3. Entri baru:\n   KexAlgorithms $kex_algorithms"
+echo -e "4. Validasi sshd: Sukses"
+echo -e "5. Algoritma aktif dari sshd -T:\n   $actual_kex"
+echo -e "\n📘 Deskripsi:\n$deskripsi"
+echo -e "📋 Nilai CIS:\n$nilai_cis"
+echo -e "================================================================================\n"
 } >> "$output_file"
 
-echo "✅ Remediasi selesai. Log: $output_file"
-echo "📦 Backup: $backup_file"
-[[ $total_manual -gt 0 ]] && echo "☑️  File manual dibackup & dikosongkan: $manual_dir"
-[[ $total_failed -gt 0 ]] && echo "✘ Beberapa file gagal diperbaiki. Lihat log."
+# === Info akhir ===
+echo "✅ Remediasi selesai. Restart SSH jika diperlukan:"
+echo "   systemctl restart sshd"
+echo "📄 Log: $output_file"
+
 
 
 
