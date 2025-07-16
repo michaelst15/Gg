@@ -12,61 +12,52 @@ sshd_config="/etc/ssh/sshd_config"
 timestamp=$(date +%F-%H%M%S)
 backup_config="/etc/ssh/sshd_config.bak.$timestamp"
 
-# Daftar algoritma kuat
+# Daftar algoritma Kex lengkap (yang didukung dan kuat - termasuk SHA256/SHA512)
 kex_algorithms="diffie-hellman-group-exchange-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha256"
 
 # === Cek hak akses tulis ===
 if [[ ! -w "$sshd_config" ]]; then
-  echo "❌ Tidak memiliki izin menulis ke $sshd_config."
+  echo "❌ Tidak memiliki izin menulis ke $sshd_config. Jalankan sebagai user yang memiliki akses."
   exit 1
 fi
 
-# === Backup konfigurasi ===
+# === Backup ===
 cp "$sshd_config" "$backup_config" && echo "📦 Backup disimpan di: $backup_config"
 
-# === Ambil entri lama ===
+# === Ambil konfigurasi lama (jika ada) ===
 old_kex=$(grep -Ei '^\s*#*\s*KexAlgorithms' "$sshd_config")
 
 # === Hapus entri lama ===
 sed -i '/^\s*#*\s*KexAlgorithms\b.*/Id' "$sshd_config"
 
-# === Tambahkan entri baru ===
-echo -e "\n# CIS 5.3.16: Set strong Key Exchange algorithms only" >> "$sshd_config"
-echo "KexAlgorithms $kex_algorithms" >> "$sshd_config"
-
-# === Validasi sshd config secara global ===
-sshd_test_output=$(sshd -t -f "$sshd_config" 2>&1)
-if [[ -n "$sshd_test_output" ]]; then
-  echo -e "❌ Validasi sshd gagal:\n$sshd_test_output"
-  echo "⏪ Mengembalikan konfigurasi dari backup."
-  cp "$backup_config" "$sshd_config"
-  exit 1
-fi
-
-# === Cek algoritma yang benar-benar digunakan oleh sshd ===
-actual_kex=$(sshd -T | grep kexalgorithms | awk '{$1=""; print $0}' | xargs)
+# === Tambahkan entri baru langsung ===
+{
+  echo ""
+  echo "# CIS 5.3.16: Set strong Key Exchange algorithms only"
+  echo "KexAlgorithms $kex_algorithms"
+} >> "$sshd_config"
 
 # === Set permission aman ===
 chmod 600 "$sshd_config"
 
-# === Simpan hasil ===
+# === Simpan log remediasi ===
 {
-echo -e "$judul\n"
-echo -e "Tindakan Remediasi:\n"
-echo -e "1. Backup konfigurasi: $backup_config"
-[[ -n "$old_kex" ]] && echo -e "2. Entri lama:\n$old_kex" || echo "2. Tidak ditemukan entri lama."
-echo -e "3. Entri baru:\n   KexAlgorithms $kex_algorithms"
-echo -e "4. Validasi sshd: Sukses"
-echo -e "5. Algoritma aktif dari sshd -T:\n   $actual_kex"
-echo -e "\n📘 Deskripsi:\n$deskripsi"
-echo -e "📋 Nilai CIS:\n$nilai_cis"
-echo -e "================================================================================\n"
+  echo -e "$judul\n"
+  echo -e "Tindakan Remediasi:\n"
+  echo -e "1. Backup disimpan di: $backup_config"
+  [[ -n "$old_kex" ]] && echo -e "2. Entri lama:\n$old_kex" || echo "2. Tidak ditemukan entri lama."
+  echo -e "3. Entri baru:\n   KexAlgorithms $kex_algorithms"
+  echo -e "4. Validasi SSH: DILEWATI sesuai permintaan pengguna"
+  echo -e "\nDeskripsi:\n$deskripsi"
+  echo -e "Nilai CIS:\n$nilai_cis"
+  echo -e "================================================================================\n"
 } >> "$output_file"
 
 # === Info akhir ===
-echo "✅ Remediasi selesai. Restart SSH jika diperlukan:"
+echo "✅ Remediasi selesai. Restart SSH untuk menerapkan perubahan:"
 echo "   systemctl restart sshd"
-echo "📄 Log: $output_file"
+echo "📄 Hasil dicatat di: $output_file"
+
 
 
 
