@@ -351,49 +351,51 @@ CONFIG_SUMMARY=$(echo "$CONFIG_SUMMARY" | sed 's/ |$//')
 
 
 #!/bin/bash
-
+ 
 OUTPUT_FILE="audit_results.txt"
-
+ 
 # Tulis header jika belum ada
 if [ ! -f "$OUTPUT_FILE" ]; then
-  {
-    echo "===== ORACLE DATABASE CIS AUDIT RESULTS ====="
-    echo "Generated on: $(date)"
-    echo "============================================="
-    echo ""
-  } > "$OUTPUT_FILE"
+{
+  echo "===== ORACLE DATABASE CIS AUDIT RESULTS ====="
+  echo "Generated on: $(date)"
+  echo "============================================="
+  echo ""
+} > "$OUTPUT_FILE"
 fi
-
+ 
 echo "🔍 Memeriksa parameter 'SEC_PROTOCOL_ERROR_FURTHER_ACTION'..." | tee -a "$OUTPUT_FILE"
-
+ 
 # Jalankan query SQL
 RAW_RESULT=$(sqlplus -s / as sysdba <<EOF
 SET HEADING OFF
 SET FEEDBACK OFF
 SET PAGESIZE 0
+SET TRIMSPOOL ON
+SET LINESIZE 1000
 SELECT UPPER(VALUE) FROM V\$PARAMETER WHERE UPPER(NAME) = 'SEC_PROTOCOL_ERROR_FURTHER_ACTION';
 EXIT;
 EOF
 )
-
-# Bersihkan output dari carriage return dan spasi
+ 
+# Bersihkan output dari karakter tersembunyi dan spasi
 VALUE=$(echo "$RAW_RESULT" | tr -d '\r' | sed '/^$/d' | xargs)
-
-# Deteksi error
+ 
+# Deteksi error SQL
 if echo "$VALUE" | grep -q "ORA-"; then
-  {
-    echo "❌ Terjadi kesalahan saat menjalankan query SQL."
-    echo "Output: $VALUE"
-  } | tee -a "$OUTPUT_FILE"
-  exit 1
+{
+  echo "❌ Terjadi kesalahan saat menjalankan query SQL."
+  echo "Output: $VALUE"
+} | tee -a "$OUTPUT_FILE"
+exit 1
 fi
-
+ 
 # Evaluasi hasil
 STATUS="Fail"
 if [[ "$VALUE" == "DROP,3" ]]; then
   STATUS="Pass"
 fi
-
+ 
 # Simpan hasil audit
 {
   echo "Judul Audit       : 2.2.13 Ensure 'SEC_PROTOCOL_ERROR_FURTHER_ACTION' Is Set to 'DROP,3'"
@@ -413,23 +415,12 @@ fi
 
 
 #!/bin/bash
-
+ 
 OUTPUT_FILE="audit_results.txt"
-
-# Tulis header jika belum ada
-if [ ! -f "$OUTPUT_FILE" ]; then
-  {
-    echo "===== ORACLE DATABASE CIS AUDIT RESULTS ====="
-    echo "Generated on: $(date)"
-    echo "============================================="
-    echo ""
-  } > "$OUTPUT_FILE"
-fi
-
-echo "🔍 Memeriksa parameter 'SEC_MAX_FAILED_LOGIN_ATTEMPTS'..." | tee -a "$OUTPUT_FILE"
-
-# Jalankan query untuk ambil nilai parameter
-RAW_RESULT=$(sqlplus -s / as sysdba <<EOF
+SQL_TEMP_FILE="/tmp/check_param.sql"
+ 
+# Buat file SQL sementara
+cat <<EOF > "$SQL_TEMP_FILE"
 SET HEADING OFF
 SET FEEDBACK OFF
 SET VERIFY OFF
@@ -439,19 +430,34 @@ SET LINESIZE 1000
 SELECT VALUE FROM V\\\$PARAMETER WHERE UPPER(NAME) = 'SEC_MAX_FAILED_LOGIN_ATTEMPTS';
 EXIT;
 EOF
-)
-
+ 
+# Tulis header jika belum ada
+if [ ! -f "$OUTPUT_FILE" ]; then
+{
+  echo "===== ORACLE DATABASE CIS AUDIT RESULTS ====="
+  echo "Generated on: $(date)"
+  echo "============================================="
+  echo ""
+} > "$OUTPUT_FILE"
+fi
+ 
+echo "🔍 Memeriksa parameter 'SEC_MAX_FAILED_LOGIN_ATTEMPTS'..." | tee -a "$OUTPUT_FILE"
+ 
+# Jalankan query dari file SQL sementara
+RAW_RESULT=$(sqlplus -s / as sysdba @"$SQL_TEMP_FILE")
+ 
 # Bersihkan hasil
 VALUE=$(echo "$RAW_RESULT" | tr -d '\r' | sed '/^$/d' | xargs)
-
+ 
 # Tangani error SQL
 if echo "$VALUE" | grep -q "ORA-"; then
-  {
-    echo "❌ Gagal menjalankan query SQL. Output: $VALUE"
-  } | tee -a "$OUTPUT_FILE"
-  exit 1
+{
+  echo "❌ Gagal menjalankan query SQL. Output: $VALUE"
+} | tee -a "$OUTPUT_FILE"
+rm -f "$SQL_TEMP_FILE"
+exit 1
 fi
-
+ 
 # Evaluasi hasil
 STATUS="Fail"
 if echo "$VALUE" | grep -Eq '^[0-9]+$'; then
@@ -461,7 +467,7 @@ if echo "$VALUE" | grep -Eq '^[0-9]+$'; then
 else
   VALUE="${VALUE:-null}"
 fi
-
+ 
 # Simpan ke file audit
 {
   echo "Judul Audit       : 2.2.12 Ensure 'SEC_MAX_FAILED_LOGIN_ATTEMPTS' Is '3' or Less"
@@ -472,3 +478,6 @@ fi
   echo "-------------------------------------------------------------"
   echo ""
 } >> "$OUTPUT_FILE"
+ 
+# Hapus file sementara
+rm -f "$SQL_TEMP_FILE"
