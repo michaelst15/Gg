@@ -2,44 +2,41 @@
 
 #!/bin/bash
 
-# === Metadata CIS ===
 judul="6.1.12 Ensure no ungrouped files or directories exist (Automated)"
 deskripsi="Memastikan tidak ada file dengan grup tidak dikenal (tanpa entry di /etc/group)."
 nilai_cis="Tidak boleh ada file atau direktori dengan grup yang tidak dikenal pada sistem."
 
-# === Lokasi output ===
 output_file="remediation_result.txt"
-
-# === Lokasi backup GID ===
 backup_dir="/var/backups/gid_fix"
 mkdir -p "$backup_dir"
 backup_file="$backup_dir/backup_ungrouped_$(date +%F-%H%M%S).txt"
 
-# === Lokasi file manual ===
 manual_dir="/tmp"
 manual_backup_dir="/var/backups/manual_lists"
 mkdir -p "$manual_backup_dir"
 
-# === Inisialisasi ===
 total_fixed=0
 total_failed=0
 total_manual=0
 declare -a file_failed
 declare -a file_ungrouped
 
-echo "🔍 Memindai filesystem lokal untuk file yang tidak memiliki grup valid..."
+# Validasi grup root tersedia
+if ! getent group root >/dev/null; then
+  echo "❌ Grup 'root' tidak ditemukan di sistem." | tee -a "$output_file"
+  exit 1
+fi
 
-# === Temukan mount point lokal ===
+echo "🔍 Memindai filesystem lokal untuk file dengan grup tidak dikenal..."
+
 mapfile -t mount_points < <(df --local -P | awk 'NR>1 {print $6}')
 
-# === Temukan semua file dengan grup tidak dikenal (ungrouped) ===
 for mp in "${mount_points[@]}"; do
   while IFS= read -r path; do
-    file_ungrouped+=("$path")
+    [[ -e "$path" || -L "$path" ]] && file_ungrouped+=("$path")
   done < <(find "$mp" -xdev -nogroup 2>/dev/null)
 done
 
-# === Perbaiki semua file yang ditemukan ===
 for file in "${file_ungrouped[@]}"; do
   [[ ! -e "$file" && ! -L "$file" ]] && continue
 
@@ -47,41 +44,42 @@ for file in "${file_ungrouped[@]}"; do
   mount_opts=$(mount | grep "on ${mount_point} " | head -n1)
 
   if echo "$mount_opts" | grep -q '\bro\b'; then
-    echo "⚠️  File di filesystem read-only, dilewati: $file" >> "$output_file"
+    echo "⚠️  Lewati (read-only FS): $file" >> "$output_file"
     file_failed+=("$file")
     ((total_failed++))
     continue
   fi
 
-  stat_info_before=$(stat -c "%U %G %u %g %n" "$file")
+  stat_info_before=$(stat -c "%U %G %u %g %n" "$file" 2>/dev/null)
   echo "[BEFORE] $stat_info_before" >> "$backup_file"
 
-  if chgrp root "$file"; then
-    stat_info_after=$(stat -c "%U %G %u %g %n" "$file")
+  # Perbaikan
+  if chgrp root "$file" 2>>"$output_file"; then
     current_gid=$(stat -c "%g" "$file")
     current_group=$(stat -c "%G" "$file")
+    stat_info_after=$(stat -c "%U %G %u %g %n" "$file")
 
     if [[ "$current_gid" -eq 0 && "$current_group" == "root" ]]; then
       echo "[AFTER]  $stat_info_after" >> "$backup_file"
       ((total_fixed++))
     else
-      echo "❌ Gagal validasi: GID sekarang '$current_gid' dan group '$current_group' bukan root: $file" >> "$output_file"
+      echo "❌ Validasi gagal: Masih bukan root [$file]" >> "$output_file"
       echo "[AFTER]  $stat_info_after" >> "$backup_file"
       file_failed+=("$file")
       ((total_failed++))
     fi
   else
-    echo "❌ Gagal chgrp root pada: $file" >> "$output_file"
+    echo "❌ chgrp gagal pada: $file" >> "$output_file"
     file_failed+=("$file")
     ((total_failed++))
   fi
 done
 
-# === Proses file manual ===
+# Tangani file manual
 timestamp=$(date +%F-%H%M%S)
 for manual_file in UNGRP-Files.txt WWF-Files.txt; do
   full_path="$manual_dir/$manual_file"
-  echo "🔄 Memproses file manual: $full_path"
+  echo "🔄 Proses manual: $full_path"
 
   if [[ -f "$full_path" ]]; then
     cp "$full_path" "$manual_backup_dir/${manual_file%.txt}_$timestamp.txt"
@@ -89,11 +87,11 @@ for manual_file in UNGRP-Files.txt WWF-Files.txt; do
     echo "☑️  $manual_file dibackup & dikosongkan." >> "$output_file"
     ((total_manual++))
   else
-    echo "⚠️  File $manual_file tidak ditemukan di $manual_dir" >> "$output_file"
+    echo "⚠️  File tidak ditemukan: $manual_file" >> "$output_file"
   fi
 done
 
-# === Laporan ===
+# Ringkasan
 {
   echo "=============================================="
   echo "$judul"
@@ -107,7 +105,7 @@ done
   echo ""
 
   if [[ $total_failed -gt 0 ]]; then
-    echo "✘ Daftar file yang gagal diperbaiki:"
+    echo "✘ Daftar file gagal diperbaiki:"
     for f in "${file_failed[@]}"; do echo "  - $f"; done
   fi
 
@@ -117,11 +115,12 @@ done
   echo "=============================================="
 } >> "$output_file"
 
-# === Ringkasan Layar ===
 echo "✅ Remediasi selesai. Log: $output_file"
 echo "📦 Backup: $backup_file"
 [[ $total_manual -gt 0 ]] && echo "☑️  File manual dibackup & dikosongkan: $manual_dir"
-[[ $total_failed -gt 0 ]] && echo "✘ Terdapat file gagal diperbaiki. Lihat log."
+[[ $total_failed -gt 0 ]] && echo "✘ Beberapa file gagal diperbaiki. Lihat log."
+
+
 
 
 
