@@ -1,105 +1,474 @@
 #!/bin/bash
- 
-# === Metadata CIS ===
-judul="6.1.12 Ensure no ungrouped files or directories exist (Automated)"
-deskripsi="Kadang-kadang saat administrator menghapus grup dari sistem, mereka lupa untuk mengubah kepemilikan file yang terkait. File ini akan menjadi ungrouped dan berisiko memberikan akses tak sengaja kepada grup baru yang menggunakan ID lama."
-nilai_cis="Tidak boleh ada file atau direktori dengan grup yang tidak dikenal pada sistem."
- 
-# === File log hasil ===
-output_file="remediation_result.txt"
- 
-# === Lokasi backup untuk group ID ===
-backup_dir="/var/backups/ownership_backup"
-mkdir -p "$backup_dir"
-backup_file="$backup_dir/ungrouped_ownership_backup_$(date +%F-%H%M%S).txt"
- 
-# === Lokasi file manual ===
-manual_dir="/var/tmp"  # GANTI jika file manual ada di lokasi lain
-manual_backup_dir="/var/backups/manual_lists"
-mkdir -p "$manual_backup_dir"
- 
-# === Inisialisasi log ===
-total_diperbaiki=0
-total_diabaikan=0
-total_gagal=0
-declare -a file_diabaikan
-declare -a file_gagal
- 
-echo "🔍 Mencari file ungrouped di seluruh filesystem lokal..."
- 
-# Cari semua file ungrouped
-mapfile -t file_ungrouped < <(df --local -P | awk 'NR>1 {print $6}' | xargs -I '{}' find '{}' -xdev -nogroup 2>/dev/null)
- 
-# Proses setiap file ungrouped
-for file in "${file_ungrouped[@]}"; do
-    [[ ! -e "$file" || -L "$file" ]] && continue
-    owner_write=$(stat -c "%A" "$file" | cut -c3)
- 
-    if [[ "$owner_write" == "w" ]]; then
-        group_id=$(stat -c "%g" "$file")
-        echo "$file $group_id" >> "$backup_file"
- 
-        if chgrp root "$file"; then
-            ((total_diperbaiki++))
-        else
-            echo "❌ Gagal chgrp root pada: $file" >> "$output_file"
-            file_gagal+=("$file")
-            ((total_gagal++))
-        fi
-    else
-        file_diabaikan+=("$file")
-        ((total_diabaikan++))
+
+OUTPUT_FILE="audit_results.txt"
+USE_PDB=0           # Set ke 1 kalau kamu yakin pakai PDB
+PDB_NAME="ORCLPDB"  # Ganti kalau pakai PDB
+
+echo "🔍 Memeriksa role 'DBA' diberikan kepada user tidak sah..." | tee -a "$OUTPUT_FILE"
+
+# Jalankan query langsung via here-document
+RAW_RESULT=$(sqlplus -s / as sysdba <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET VERIFY OFF
+SET PAGESIZE 0
+SET LINESIZE 1000
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+
+-- Optional switch ke PDB
+$( [ "$USE_PDB" -eq 1 ] && echo "ALTER SESSION SET CONTAINER=$PDB_NAME;" )
+
+SELECT 'GRANT:' || GRANTEE FROM DBA_ROLE_PRIVS WHERE GRANTED_ROLE = 'DBA'
+UNION
+SELECT 'PROXY:' || PROXY || '-' || CLIENT FROM DBA_PROXIES
+WHERE CLIENT IN (
+  SELECT GRANTEE FROM DBA_ROLE_PRIVS WHERE GRANTED_ROLE = 'DBA'
+);
+
+EXIT;
+EOF
+)
+
+# Tangani error ORA-
+echo "$RAW_RESULT" | grep -q "ORA-" && {
+  echo "❌ Gagal menjalankan query. Pastikan database/PDB sudah OPEN dan nama PDB benar." | tee -a "$OUTPUT_FILE"
+  exit 1
+}
+
+# Bersihkan hasil
+CLEANED=$(echo "$RAW_RESULT" | tr -d '\r' | sed '/^$/d' | sed 's/^[ \t]*//;s/[ \t]*$//')
+
+AUTHORIZED_USERS="ORACLE ORACLEP"
+STATUS="Pass"
+VIOLATIONS=""
+
+while IFS= read -r line; do
+  case "$line" in
+    *:*) ;;
+    *) continue ;;
+  esac
+
+  GRANTEE=$(echo "$line" | cut -d':' -f2 | cut -d'-' -f1 | tr '[:lower:]' '[:upper:]' | xargs)
+
+  AUTHORIZED=0
+  for AUTH in $AUTHORIZED_USERS; do
+    if [ "$GRANTEE" = "$AUTH" ]; then
+      AUTHORIZED=1
+      break
     fi
-done
- 
-# === Backup & kosongkan file manual ===
-timestamp=$(date +%F-%H%M%S)
-for manual_file in UNGRP-Files.txt WWF-Files.txt; do
-    full_path="$manual_dir/$manual_file"
-    echo "🔎 Memproses file manual: $full_path"
- 
-    if [[ -f "$full_path" ]]; then
-        cp "$full_path" "$manual_backup_dir/${manual_file%.txt}_$timestamp.txt"
-        truncate -s 0 "$full_path"
-        echo "✅ File $manual_file dibackup dan dikosongkan."
-    else
-        echo "⚠️ File $manual_file tidak ditemukan di $manual_dir." >> "$output_file"
-    fi
-done
- 
-# === Simpan laporan remediasi ===
+  done
+
+  if [ "$AUTHORIZED" -ne 1 ]; then
+    STATUS="Fail"
+    VIOLATIONS="${VIOLATIONS}${line}\n"
+  fi
+done <<< "$CLEANED"
+
+# Ringkasan hasil
+if [ "$STATUS" = "Pass" ]; then
+  VALUE="Tidak ditemukan GRANTEE tidak sah dengan role DBA"
+else
+  VALUE="Ditemukan GRANTEE tidak sah dengan role DBA:\n$VIOLATIONS"
+fi
+
+# Simpan hasil ke audit file
 {
-    echo -e "$judul\n"
-    echo -e "Tindakan Remediasi:"
-    echo -e "1. Total file ungrouped ditemukan: ${#file_ungrouped[@]}"
-    echo -e "2. File yang dikoreksi (chgrp root): $total_diperbaiki"
-    echo -e "3. File yang diabaikan karena owner tidak punya write: $total_diabaikan"
-    echo -e "4. File yang gagal diubah: $total_gagal"
-    echo -e "5. Backup group ID disimpan di: $backup_file"
- 
-    if [[ $total_diperbaiki -gt 0 ]]; then
-        echo -e "\n📁 Daftar file yang dikoreksi:"
-        cut -d' ' -f1 "$backup_file"
-    fi
- 
-    if [[ $total_diabaikan -gt 0 ]]; then
-        echo -e "\n⚠️ File yang diabaikan (owner tidak punya write):"
-        for f in "${file_diabaikan[@]}"; do echo "$f"; done
-    fi
- 
-    if [[ $total_gagal -gt 0 ]]; then
-        echo -e "\n❌ File yang gagal diubah:"
-        for f in "${file_gagal[@]}"; do echo "$f"; done
-    fi
- 
-    echo -e "\nDeskripsi:\n$deskripsi"
-    echo -e "Nilai CIS:\n$nilai_cis"
-    echo -e "================================================================================"
-} >> "$output_file"
- 
-# === Ringkasan ke layar ===
-echo "✅ Remediasi selesai. Hasil dicatat di: $output_file"
-[[ -s "$backup_file" ]] && echo "📦 Backup group ownership disimpan di: $backup_file"
-[[ $total_diabaikan -gt 0 ]] && echo "⚠️ $total_diabaikan file diabaikan karena tidak punya owner write."
-[[ $total_gagal -gt 0 ]] && echo "❌ $total_gagal file gagal diperbaiki."
-echo "📂 File manual UNGRP-Files.txt dan WWF-Files.txt telah dibackup & dikosongkan di: $manual_backup_dir"
+  echo "Judul Audit : 5.3.4 Ensure 'DBA' Is Revoked from Unauthorized 'GRANTEE'"
+  echo "Status : $STATUS"
+  printf "Nilai Konfigurasi : $VALUE\n"
+  echo "Nilai CIS : 1 (Role DBA hanya boleh diberikan kepada user Oracle internal seperti ORACLE/ORACLEP)"
+  echo "Deskripsi : Role DBA memberikan akses administratif penuh. Jika diberikan ke user yang tidak sah, dapat menyebabkan pelanggaran keamanan, integritas, atau gangguan layanan."
+  echo "-------------------------------------------------------------"
+  echo ""
+} >> "$OUTPUT_FILE"
+
+
+
+
+
+#!/bin/bash
+
+OUTPUT_FILE="audit_results.txt"
+echo "🔍 Memeriksa parameter 'OS_ROLES'..." | tee -a "$OUTPUT_FILE"
+
+# Deteksi apakah menggunakan multitenant (CDB)
+IS_CDB=$(sqlplus -s / as sysdba <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SELECT CDB FROM V\$DATABASE;
+EXIT;
+EOF
+)
+IS_CDB=$(echo "$IS_CDB" | tr -d '[:space:]')
+
+# Siapkan query SQL berdasarkan apakah CDB atau bukan
+if [ "$IS_CDB" = "YES" ]; then
+  QUERY="
+  SET HEADING OFF
+  SET FEEDBACK OFF
+  SET VERIFY OFF
+  SET PAGESIZE 100
+  SELECT DISTINCT UPPER(V.VALUE) || ' | ' ||
+    DECODE(V.CON_ID,
+           0, (SELECT NAME FROM V\$DATABASE),
+           1, (SELECT NAME FROM V\$DATABASE),
+           (SELECT NAME FROM V\$PDBS B WHERE V.CON_ID = B.CON_ID))
+  FROM V\$SYSTEM_PARAMETER V
+  WHERE UPPER(V.NAME) = 'OS_ROLES';
+  EXIT;"
+else
+  QUERY="
+  SET HEADING OFF
+  SET FEEDBACK OFF
+  SET VERIFY OFF
+  SET PAGESIZE 0
+  SELECT UPPER(VALUE) FROM V\$SYSTEM_PARAMETER WHERE UPPER(NAME) = 'OS_ROLES';
+  EXIT;"
+fi
+
+# Jalankan query melalui sqlplus
+RESULT=$(sqlplus -s / as sysdba <<EOF
+$QUERY
+EOF
+)
+
+# Evaluasi hasil
+STATUS="Pass"
+CONFIG_SUMMARY=""
+
+# Gunakan loop langsung tanpa subshell
+while IFS= read -r line; do
+  CLEAN=$(echo "$line" | tr -d '\r' | xargs)
+  VALUE=$(echo "$CLEAN" | cut -d'|' -f1 | tr -d '[:space:]')
+  DBNAME=$(echo "$CLEAN" | cut -d'|' -f2- | xargs)
+
+  if [ "$VALUE" != "FALSE" ]; then
+    STATUS="Fail"
+  fi
+
+  if [ -n "$DBNAME" ]; then
+    CONFIG_SUMMARY="$CONFIG_SUMMARY PDB/DB: $DBNAME = $VALUE |"
+  else
+    CONFIG_SUMMARY="$CONFIG_SUMMARY OS_ROLES = $VALUE |"
+  fi
+done <<< "$RESULT"
+
+# Hapus pemisah terakhir
+CONFIG_SUMMARY=$(echo "$CONFIG_SUMMARY" | sed 's/ |$//')
+
+# Simpan hasil ke file audit
+{
+  echo "Judul Audit       : 2.2.5 Ensure 'OS_ROLES' Is Set to 'FALSE'"
+  echo "Status            : $STATUS"
+  echo "Nilai Konfigurasi : $CONFIG_SUMMARY"
+  echo "Nilai CIS         : FALSE"
+  echo "Deskripsi         : Parameter OS_ROLES harus disetel ke FALSE untuk mencegah pemetaan grup sistem operasi secara langsung ke peran database, yang dapat menimbulkan celah hak akses."
+  echo "-------------------------------------------------------------"
+  echo ""
+} >> "$OUTPUT_FILE"
+
+
+
+
+
+
+
+#!/bin/bash
+
+OUTPUT_FILE="audit_results.txt"
+echo "🔍 Memeriksa parameter 'O7_DICTIONARY_ACCESSIBILITY'..." | tee -a "$OUTPUT_FILE"
+
+# Deteksi apakah database adalah CDB (multitenant) atau tidak
+IS_CDB=$(sqlplus -s / as sysdba <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SELECT CDB FROM V\$DATABASE;
+EXIT;
+EOF
+)
+IS_CDB=$(echo "$IS_CDB" | tr -d '[:space:]')
+
+# Siapkan query tergantung dari apakah CDB atau bukan
+if [ "$IS_CDB" = "YES" ]; then
+  QUERY="
+  SET HEADING OFF
+  SET FEEDBACK OFF
+  SET VERIFY OFF
+  SET PAGESIZE 100
+  SELECT DISTINCT UPPER(V.VALUE) || ' | ' ||
+    DECODE(V.CON_ID,
+           0, (SELECT NAME FROM V\$DATABASE),
+           1, (SELECT NAME FROM V\$DATABASE),
+           (SELECT NAME FROM V\$PDBS B WHERE V.CON_ID = B.CON_ID))
+  FROM V\$SYSTEM_PARAMETER V
+  WHERE UPPER(NAME) = 'O7_DICTIONARY_ACCESSIBILITY';
+  EXIT;"
+else
+  QUERY="
+  SET HEADING OFF
+  SET FEEDBACK OFF
+  SET VERIFY OFF
+  SET PAGESIZE 0
+  SELECT UPPER(VALUE) FROM V\$SYSTEM_PARAMETER WHERE UPPER(NAME) = 'O7_DICTIONARY_ACCESSIBILITY';
+  EXIT;"
+fi
+
+# Jalankan query
+RESULT=$(sqlplus -s / as sysdba <<EOF
+$QUERY
+EOF
+)
+
+# Evaluasi hasil
+STATUS="Pass"
+CONFIG_SUMMARY=""
+
+# Perbaikan: loop langsung tanpa subshell
+while IFS= read -r line; do
+  RESULT_CLEAN=$(echo "$line" | tr -d '\r' | xargs)
+  VALUE=$(echo "$RESULT_CLEAN" | cut -d'|' -f1 | tr -d '[:space:]')
+  DBNAME=$(echo "$RESULT_CLEAN" | cut -d'|' -f2- | xargs)
+
+  if [ "$VALUE" != "FALSE" ]; then
+    STATUS="Fail"
+  fi
+
+  if [ -n "$DBNAME" ]; then
+    CONFIG_SUMMARY="$CONFIG_SUMMARY PDB/DB: $DBNAME = $VALUE |"
+  else
+    CONFIG_SUMMARY="$CONFIG_SUMMARY O7_DICTIONARY_ACCESSIBILITY = $VALUE |"
+  fi
+done <<< "$RESULT"
+
+# Hapus separator terakhir
+CONFIG_SUMMARY=$(echo "$CONFIG_SUMMARY" | sed 's/ |$//')
+
+# Simpan hasil audit ke file
+{
+  echo "Judul Audit       : 2.2.4 Ensure 'O7_DICTIONARY_ACCESSIBILITY' Is Set to 'FALSE'"
+  echo "Status            : $STATUS"
+  echo "Nilai Konfigurasi : $CONFIG_SUMMARY"
+  echo "Nilai CIS         : FALSE"
+  echo "Deskripsi         : Parameter ini mencegah akses ke objek SYS oleh pengguna dengan hak ANY (misalnya SELECT ANY TABLE) dan seharusnya disetel ke FALSE. Parameter ini sudah deprecated di Oracle 12.2+."
+  echo "-------------------------------------------------------------"
+  echo ""
+} >> "$OUTPUT_FILE"
+
+
+
+
+
+
+#!/bin/bash
+
+OUTPUT_FILE="audit_results.txt"
+echo "🔍 Memeriksa parameter 'GLOBAL_NAMES'..." | tee -a "$OUTPUT_FILE"
+
+# Cek apakah database multitenant (CDB) atau bukan
+IS_CDB=$(sqlplus -s / as sysdba <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SELECT CDB FROM V\$DATABASE;
+EXIT;
+EOF
+)
+IS_CDB=$(echo "$IS_CDB" | tr -d '[:space:]')
+
+# Siapkan query tergantung apakah CDB atau non-CDB
+if [ "$IS_CDB" = "YES" ]; then
+  QUERY="
+  SET HEADING OFF
+  SET FEEDBACK OFF
+  SET VERIFY OFF
+  SET PAGESIZE 100
+  SELECT DISTINCT UPPER(V.VALUE) || ' | ' ||
+    DECODE(V.CON_ID,
+           0, (SELECT NAME FROM V\$DATABASE),
+           1, (SELECT NAME FROM V\$DATABASE),
+           (SELECT NAME FROM V\$PDBS B WHERE V.CON_ID = B.CON_ID))
+  FROM V\$SYSTEM_PARAMETER V
+  WHERE UPPER(V.NAME) = 'GLOBAL_NAMES';
+  EXIT;"
+else
+  QUERY="
+  SET HEADING OFF
+  SET FEEDBACK OFF
+  SET VERIFY OFF
+  SET PAGESIZE 0
+  SELECT UPPER(VALUE) FROM V\$SYSTEM_PARAMETER WHERE UPPER(NAME) = 'GLOBAL_NAMES';
+  EXIT;"
+fi
+
+# Eksekusi query
+GLOBAL_RESULT=$(sqlplus -s / as sysdba <<EOF
+$QUERY
+EOF
+)
+
+# Proses hasil
+STATUS="Pass"
+CONFIG_SUMMARY=""
+
+# ✅ Ganti subshell dengan loop langsung
+while IFS= read -r line; do
+  RESULT=$(echo "$line" | tr -d '\r' | xargs)
+  VALUE=$(echo "$RESULT" | cut -d'|' -f1 | tr -d '[:space:]')
+  PDB=$(echo "$RESULT" | cut -d'|' -f2- | xargs)
+
+  if [ "$VALUE" != "TRUE" ]; then
+    STATUS="Fail"
+  fi
+
+  if [ -n "$PDB" ]; then
+    CONFIG_SUMMARY="$CONFIG_SUMMARY PDB/DB: $PDB = $VALUE |"
+  else
+    CONFIG_SUMMARY="$CONFIG_SUMMARY GLOBAL_NAMES = $VALUE |"
+  fi
+done <<< "$GLOBAL_RESULT"
+
+# Hapus pemisah terakhir
+CONFIG_SUMMARY=$(echo "$CONFIG_SUMMARY" | sed 's/ |$//')
+
+# Simpan hasil audit ke file
+{
+  echo "Judul Audit       : 2.2.3 Ensure 'GLOBAL_NAMES' Is Set to 'TRUE'"
+  echo "Status            : $STATUS"
+  echo "Nilai Konfigurasi : $CONFIG_SUMMARY"
+  echo "Nilai CIS         : TRUE"
+  echo "Deskripsi         : GLOBAL_NAMES memastikan bahwa nama database link sesuai dengan nama database target, menghindari koneksi dari domain yang tidak sah."
+  echo "-------------------------------------------------------------"
+  echo ""
+} >> "$OUTPUT_FILE"
+
+
+
+
+
+
+
+
+#!/bin/bash
+
+OUTPUT_FILE="audit_results.txt"
+
+# Tulis header jika belum ada
+if [ ! -f "$OUTPUT_FILE" ]; then
+  {
+    echo "===== ORACLE DATABASE CIS AUDIT RESULTS ====="
+    echo "Generated on: $(date)"
+    echo "============================================="
+    echo ""
+  } > "$OUTPUT_FILE"
+fi
+
+echo "🔍 Memeriksa parameter 'SEC_PROTOCOL_ERROR_FURTHER_ACTION'..." | tee -a "$OUTPUT_FILE"
+
+# Jalankan query SQL
+RAW_RESULT=$(sqlplus -s / as sysdba <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SELECT UPPER(VALUE) FROM V\$PARAMETER WHERE UPPER(NAME) = 'SEC_PROTOCOL_ERROR_FURTHER_ACTION';
+EXIT;
+EOF
+)
+
+# Bersihkan output dari carriage return dan spasi
+VALUE=$(echo "$RAW_RESULT" | tr -d '\r' | sed '/^$/d' | xargs)
+
+# Deteksi error
+if echo "$VALUE" | grep -q "ORA-"; then
+  {
+    echo "❌ Terjadi kesalahan saat menjalankan query SQL."
+    echo "Output: $VALUE"
+  } | tee -a "$OUTPUT_FILE"
+  exit 1
+fi
+
+# Evaluasi hasil
+STATUS="Fail"
+if [[ "$VALUE" == "DROP,3" ]]; then
+  STATUS="Pass"
+fi
+
+# Simpan hasil audit
+{
+  echo "Judul Audit       : 2.2.13 Ensure 'SEC_PROTOCOL_ERROR_FURTHER_ACTION' Is Set to 'DROP,3'"
+  echo "Status            : $STATUS"
+  echo "Nilai Konfigurasi : ${VALUE:-null}"
+  echo "Nilai CIS         : DROP,3"
+  echo "Deskripsi         : Parameter ini menentukan tindakan server saat menerima paket klien yang rusak. Nilai DROP,3 akan memutus koneksi setelah 3 kesalahan, untuk mencegah potensi serangan berbasis jaringan seperti TCP SYN Flood atau Smurf."
+  echo "-------------------------------------------------------------"
+  echo ""
+} >> "$OUTPUT_FILE"
+
+
+
+
+
+
+
+
+#!/bin/bash
+
+OUTPUT_FILE="audit_results.txt"
+
+# Tulis header jika belum ada
+if [ ! -f "$OUTPUT_FILE" ]; then
+  {
+    echo "===== ORACLE DATABASE CIS AUDIT RESULTS ====="
+    echo "Generated on: $(date)"
+    echo "============================================="
+    echo ""
+  } > "$OUTPUT_FILE"
+fi
+
+echo "🔍 Memeriksa parameter 'SEC_MAX_FAILED_LOGIN_ATTEMPTS'..." | tee -a "$OUTPUT_FILE"
+
+# Jalankan query untuk ambil nilai parameter
+RAW_RESULT=$(sqlplus -s / as sysdba <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET VERIFY OFF
+SET PAGESIZE 0
+SET TRIMSPOOL ON
+SET LINESIZE 1000
+SELECT VALUE FROM V\\\$PARAMETER WHERE UPPER(NAME) = 'SEC_MAX_FAILED_LOGIN_ATTEMPTS';
+EXIT;
+EOF
+)
+
+# Bersihkan hasil
+VALUE=$(echo "$RAW_RESULT" | tr -d '\r' | sed '/^$/d' | xargs)
+
+# Tangani error SQL
+if echo "$VALUE" | grep -q "ORA-"; then
+  {
+    echo "❌ Gagal menjalankan query SQL. Output: $VALUE"
+  } | tee -a "$OUTPUT_FILE"
+  exit 1
+fi
+
+# Evaluasi hasil
+STATUS="Fail"
+if echo "$VALUE" | grep -Eq '^[0-9]+$'; then
+  if [ "$VALUE" -le 3 ]; then
+    STATUS="Pass"
+  fi
+else
+  VALUE="${VALUE:-null}"
+fi
+
+# Simpan ke file audit
+{
+  echo "Judul Audit       : 2.2.12 Ensure 'SEC_MAX_FAILED_LOGIN_ATTEMPTS' Is '3' or Less"
+  echo "Status            : $STATUS"
+  echo "Nilai Konfigurasi : $VALUE"
+  echo "Nilai CIS         : 3 atau kurang"
+  echo "Deskripsi         : Parameter ini menentukan berapa kali login gagal yang diizinkan sebelum koneksi ditutup. Disarankan maksimal 3 untuk mencegah brute-force atau denial-of-service."
+  echo "-------------------------------------------------------------"
+  echo ""
+} >> "$OUTPUT_FILE"
