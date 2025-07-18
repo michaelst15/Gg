@@ -6,7 +6,7 @@ echo "Mencari dan menghapus semua karakter carriage return dari semua file .sh .
 
 find . -type f -name "*.sh" | while read -r file; do
     echo "Membersihkan: $file"
-    tmpfile=$(mktemp /tmp/cleanXXXXXX) || { echo "Gagal membuat file sementara"; exit 1; }
+    tmpfile="${file}.tmp.$$"
     tr -d '\r' < "$file" > "$tmpfile" && mv "$tmpfile" "$file" || {
         echo "Gagal memproses $file"
         rm -f "$tmpfile"
@@ -14,6 +14,7 @@ find . -type f -name "*.sh" | while read -r file; do
 done
 
 echo "Semua karakter carriage return telah dihapus dari semua file .sh"
+
 
 
 
