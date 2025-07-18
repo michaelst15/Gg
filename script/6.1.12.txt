@@ -1,3 +1,94 @@
+#!/bin/bash
+# remove_M.sh
+# Membersihkan semua file .sh dari karakter carriage return (\r)
+
+echo "Mencari dan menghapus semua karakter carriage return dari semua file .sh ..."
+
+find . -type f -name "*.sh" | while read -r file; do
+    echo "Membersihkan: $file"
+    tmpfile=$(mktemp /tmp/cleanXXXXXX) || { echo "Gagal membuat file sementara"; exit 1; }
+    tr -d '\r' < "$file" > "$tmpfile" && mv "$tmpfile" "$file" || {
+        echo "Gagal memproses $file"
+        rm -f "$tmpfile"
+    }
+done
+
+echo "Semua karakter carriage return telah dihapus dari semua file .sh"
+
+
+
+
+#!/bin/bash
+
+# File hasil output audit/remediasi
+output_file="remediation_result.txt"
+
+# Metadata CIS
+judul="Judul Audit: 4.2.2 Ensure permissions on all logfiles are configured"
+deskripsi="File log di /var/log berisi data penting dari berbagai layanan sistem. Mengatur permission secara ketat mencegah akses tidak sah terhadap informasi sensitif."
+nilai_cis="Permission file log harus memastikan:\n- Group tidak memiliki izin write atau execute\n- Other tidak memiliki izin apapun\nPerintah: find /var/log -type f -exec chmod g-wx,o-rwx {} +"
+
+# Timestamp untuk backup
+timestamp=$(date +%F-%H%M%S)
+
+# Backup metadata file yang tidak sesuai
+log_before="/var/backups/logs_metadata_noncompliant_${timestamp}.txt"
+mkdir -p /var/backups
+
+# Backup fisik file yang tidak sesuai ke direktori khusus
+backup_dir="/var/backups/logs_noncompliant_backup_${timestamp}"
+mkdir -p "$backup_dir"
+
+# Tempat log sementara
+log_sementara=$(mktemp)
+
+echo "🔍 Memeriksa file log yang tidak sesuai permission standar..."
+
+find /var/log -type f | while read -r file; do
+  perm=$(stat -c "%a" "$file")
+  g_write_exec=$(( (perm / 10) % 10 ))
+  o_perm=$(( perm % 10 ))
+
+  # Jika grup memiliki write (2) atau execute (1), atau others punya permission
+  if (( (g_write_exec & 3) != 0 || o_perm != 0 )); then
+    echo "$perm $file" >> "$log_before"
+    cp --parents "$file" "$backup_dir" 2>/dev/null
+    chmod g-wx,o-rwx "$file"
+    echo "✅ Diperbaiki: $file (asal: $perm)" >> "$log_sementara"
+  fi
+done
+
+modified_count=$(wc -l < "$log_sementara")
+
+# Catat hasil ke file output
+{
+echo -e "$judul\n"
+echo -e "Tindakan Remediasi:\n"
+echo -e "1. Backup metadata izin file non-kompatibel: $log_before"
+echo -e "2. Backup fisik file log yang dimodifikasi ke: $backup_dir"
+echo -e "3. Menjalankan chmod hanya pada file yang tidak sesuai:"
+echo -e "   chmod g-wx,o-rwx <file>"
+echo -e "4. Total file log yang diperbaiki: $modified_count\n"
+echo -e "Daftar file yang diperbaiki:"
+cat "$log_sementara"
+echo -e "\nDeskripsi:\n$deskripsi"
+echo -e "\nNilai CIS:\n$nilai_cis"
+echo -e "================================================================================\n"
+} >> "$output_file"
+
+# Bersihkan
+rm -f "$log_sementara"
+
+echo "✅ Remediasi selesai. Total file diperbaiki: $modified_count"
+echo "📄 Metadata backup: $log_before"
+echo "📂 Backup file log: $backup_dir"
+echo "📝 Log hasil: $output_file"
+
+
+
+
+
+
 ==================================================================================================================================
 rollback 3_5_2 sctp
 
