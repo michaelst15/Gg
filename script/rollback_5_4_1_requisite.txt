@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# File target
+target_files=("/etc/pam.d/system-auth" "/etc/pam.d/password-auth")
+
+# Log hasil rollback
+rollback_log="rollback_password_policy_result.txt"
+
+echo "Rollback Konfigurasi Password Policy (CIS 5.4.1)" > "$rollback_log"
+echo "Tanggal rollback: $(date)" >> "$rollback_log"
+echo "==============================================================" >> "$rollback_log"
+
+for file in "${target_files[@]}"; do
+  base_name=$(basename "$file")
+  dir_name=$(dirname "$file")
+
+  # Cari backup jam paling awal berdasarkan nama timestamp
+  earliest_backup=$(find "$dir_name" -type f -name "$base_name.bak.*" 2>/dev/null | \
+    grep -oP "${base_name}\.bak\.\K\d{4}-\d{2}-\d{2}-\d{6}" | sort | head -n 1)
+
+  full_backup_path="$file.bak.$earliest_backup"
+
+  if [[ -n "$earliest_backup" && -f "$full_backup_path" ]]; then
+    cp "$full_backup_path" "$file"
+    chmod 644 "$file"
+    echo "✅ $file dikembalikan dari backup: $full_backup_path (Timestamp: $earliest_backup)" | tee -a "$rollback_log"
+  else
+    echo "⚠️ Backup tidak ditemukan untuk $file. Tidak ada perubahan yang dilakukan." | tee -a "$rollback_log"
+  fi
+done
+
+echo -e "\nRollback selesai. Log disimpan di: $rollback_log"
