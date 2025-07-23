@@ -1,0 +1,1020 @@
+----------------------------------------
+# SCRIPT: ./1.1.sh
+----------------------------------------
+Judul Audit : 1.1 Place Databases on Non-System Partitions
+Status : Fail
+Nilai Konfigurasi : 
+Database directories on system partitions: 
+/usr mounted on /; /usr/lib64/mariadb/plugin/ mounted on /; /usr/share/mariadb/charsets/ mounted on /; /var/lib/mysql/ mounted on /; /var/tmp mounted on /; 
+Nilai CIS : Database files should not be on /, /var, or /usr partitions
+Deskripsi : Verifikasi bahwa file MariaDB ditempatkan di partisi non-sistem
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./1.2.sh
+----------------------------------------
+Judul Audit : 1.2 Use Dedicated Least Privileged Account for MariaDB Daemon/Service
+Status : Pass
+Nilai Konfigurasi : 
+MariaDB is running under dedicated user: 
+mysql
+Nilai CIS : MariaDB harus berjalan dengan dedicated least privileged user (mysql)
+Deskripsi : Verifikasi bahwa service MariaDB dijalankan dengan akun mysql untuk membatasi akses.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./1.3.sh
+----------------------------------------
+Judul Audit : 1.3 Disable MariaDB Command History
+Status : Fail
+Nilai Konfigurasi : .mysql_history files not linked to /dev/null: /root/.mysql_history 
+Nilai CIS : Semua file .mysql_history harus di-nonaktifkan dengan symbolic link ke /dev/null
+Deskripsi : Verifikasi bahwa MariaDB client dan shell command history telah dinonaktifkan untuk mencegah kebocoran data sensitif.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./1.4.sh
+----------------------------------------
+Judul Audit : 1.4 Verify That the MYSQL_PWD Environment Variable is Not in Use
+Status : Pass
+Nilai Konfigurasi : No MYSQL_PWD environment variable found in running processes
+Nilai CIS : MYSQL_PWD environment variable tidak boleh digunakan
+Deskripsi : Pastikan tidak ada proses yang memiliki MYSQL_PWD di environment untuk menjaga kerahasiaan kredensial MariaDB.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./1.5.sh
+----------------------------------------
+Judul Audit : 1.5 Ensure Interactive Login is Disabled
+Status : Pass
+Nilai Konfigurasi : MariaDB user has interactive login disabled (/sbin/nologin)
+Nilai CIS : Akun MariaDB harus menggunakan shell /sbin/nologin atau /bin/false untuk mencegah login interaktif
+Deskripsi : Verifikasi bahwa user MariaDB tidak dapat melakukan login interaktif ke sistem operasi.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./1.6.sh
+----------------------------------------
+Judul Audit : 1.6 Verify That 'MYSQL_PWD' is Not Set in Users' Profiles
+Status : Pass
+Nilai Konfigurasi : 
+No MYSQL_PWD found in any user profile or bashrc files
+
+
+Nilai CIS : Tidak boleh ada MYSQL_PWD di login scripts (.bashrc, .profile, .bash_profile) user
+Deskripsi : Verifikasi bahwa variabel MYSQL_PWD tidak disetel di profile user untuk menjaga kerahasiaan kredensial MariaDB.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./1.7.sh
+----------------------------------------
+Judul Audit : 1.7 Ensure MariaDB is Run Under a Sandbox Environment
+Status : Pass
+Nilai Konfigurasi : MariaDB is managed by systemd and running as mysql (not root)
+Nilai CIS : MariaDB harus dijalankan dalam sandbox environment (chroot, systemd dengan isolasi, atau Docker)
+Deskripsi : Verifikasi bahwa MariaDB berjalan di lingkungan sandbox untuk meminimalkan dampak potensi kerentanan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.10.sh
+----------------------------------------
+Judul Audit : 2.10 Limit Accepted Transport Layer Security (TLS) Versions
+Status : Fail
+Nilai Konfigurasi : 
+Tidak dapat menentukan versi TLS yang diterima (variabel tls_version tidak tersedia di MariaDB ini).
+
+Nilai CIS : MariaDB tidak boleh menerima koneksi TLSv1 atau TLSv1.1, hanya TLSv1.2 atau lebih baru
+Deskripsi : Verifikasi bahwa MariaDB hanya menerima koneksi menggunakan TLS modern (TLSv1.2 atau TLSv1.3), untuk melindungi data dalam transit dari serangan downgrade.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.1.1.sh
+----------------------------------------
+Judul Audit : 2.1.1 Backup Policy in Place
+Status : Fail
+Nilai Konfigurasi : 
+No backup schedule found in crontab
+
+Nilai CIS : Backup policy harus ada untuk MariaDB, termasuk mysql
+Deskripsi : Verifikasi bahwa terdapat kebijakan backup untuk MariaDB (misalnya mysqldump atau mariabackup) yang terjadwal di crontab.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.11.sh
+----------------------------------------
+Judul Audit : 2.11 Require Client-Side Certificates (X.509)
+Status : Pass
+Nilai Konfigurasi : All users require X.509 client certificates for authentication.
+Nilai CIS : Semua user non-sistem harus menggunakan autentikasi berbasis sertifikat klien X.509
+Deskripsi : Verifikasi bahwa semua user MariaDB (kecuali mysql, root, dan mariadb.sys) membutuhkan sertifikat klien X.509 untuk koneksi, memberikan lapisan keamanan tambahan dalam autentikasi.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.1.2.sh
+----------------------------------------
+Judul Audit : 2.1.2 Verify Backups are Good
+Status : Fail
+Nilai Konfigurasi : No backup validation reports found
+Nilai CIS : Backup harus divalidasi secara berkala untuk memastikan integritas data
+Deskripsi : Verifikasi bahwa backup MariaDB telah diuji dan laporan validasi tersedia untuk memastikan pemulihan data yang andal.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.12.sh
+----------------------------------------
+Judul Audit : 2.12 Ensure Only Approved Ciphers are Used
+Status : FAIL
+Nilai Konfigurasi : 
+
+ssl_cipher kosong, MariaDB tidak menerapkan cipher TLS yang kuat.
+Nilai CIS : MariaDB harus dikonfigurasi agar hanya menggunakan cipher TLS yang kuat dan disetujui. Jika nilai ssl_cipher kosong atau menggunakan cipher yang tidak disetujui, maka hasilnya FAIL.
+Deskripsi : MariaDB mendukung banyak cipher TLS. Memaksa penggunaan cipher yang kuat akan melindungi data dalam transit dari serangan penyadapan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.1.3.sh
+----------------------------------------
+Judul Audit : 2.1.3 Secure Backup Credentials
+Status : Pass
+Nilai Konfigurasi : All backup credential files are properly secured (600 or stricter, owned by root)
+Nilai CIS : File kredensial backup harus dilindungi (izin <= 600 dan dimiliki root)
+Deskripsi : Verifikasi bahwa file password, sertifikat, dan kredensial backup MariaDB terlindungi dengan hak akses minimal.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.1.4.sh
+----------------------------------------
+Judul Audit : 2.1.4 The Backups Should be Properly Secured
+Status : Pass
+Nilai Konfigurasi : All backup files and directories have secure permissions (≤750 for directories, ≤640 for files)
+Nilai CIS : Backup MariaDB harus dilindungi dengan permission aman (filesystem & enkripsi)
+Deskripsi : Verifikasi bahwa backup MariaDB dilindungi oleh hak akses dan/atau enkripsi untuk mencegah akses tidak sah.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.1.5.sh
+----------------------------------------
+Judul Audit : 2.1.5 Point-in-Time Recovery
+Status : Fail
+Nilai Konfigurasi : Binary logs not enabled (log_bin=OFF)
+Nilai CIS : Binary logs harus diaktifkan dan memiliki expire time (>0) untuk mendukung Point-in-Time Recovery
+Deskripsi : Verifikasi bahwa binary logs MariaDB diaktifkan, memiliki pengaturan expire, dan dapat digunakan untuk Point-in-Time Recovery.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.1.6.sh
+----------------------------------------
+Judul Audit : 2.1.6 Disaster Recovery (DR) Plan
+Status : Fail
+Nilai Konfigurasi : No documented Disaster Recovery Plan found
+Nilai CIS : DR Plan harus ada untuk MariaDB (meliputi RTO, kapasitas recovery site, dan offsite backup/replication)
+Deskripsi : Verifikasi bahwa DR Plan terdokumentasi dengan baik, mencakup strategi pemulihan, RTO, enkripsi, dan replika offsite untuk MariaDB.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.1.7.sh
+----------------------------------------
+Judul Audit : 2.1.7 Backup of Configuration and Related Files
+Status : Pass
+Nilai Konfigurasi : All critical MariaDB configuration, key, and log files are included in backup
+Nilai CIS : Semua file konfigurasi, log, key, sertifikat, UDF, dan custom code MariaDB harus termasuk dalam backup
+Deskripsi : Verifikasi bahwa semua file konfigurasi penting, key management, audit log, SSL, dan custom code MariaDB sudah termasuk dalam backup.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.2.sh
+----------------------------------------
+Judul Audit : 2.2 Dedicate the Machine Running MariaDB
+Status : Fail
+Nilai Konfigurasi : 
+Unrelated services running: 
+abrt-journal-core abrt-oops abrt-xorg abrtd atd chronyd crond dbus getty@tty1 libstoragemgmt NetworkManager polkit rhsmcertd smartd systemd-journald systemd-logind systemd-udevd tuned user@0 
+Nilai CIS : Server MariaDB harus berjalan di mesin yang didedikasikan, tanpa layanan atau aplikasi lain yang tidak perlu
+Deskripsi : Verifikasi bahwa mesin ini hanya menjalankan OS, MariaDB, dan layanan operasional minimum, mengurangi permukaan serangan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.3.sh
+----------------------------------------
+Judul Audit : 2.3 Do Not Specify Passwords in the Command Line
+Status : Pass
+Nilai Konfigurasi : No passwords visible in process list or command history
+Nilai CIS : Password MariaDB tidak boleh muncul di command line atau history shell
+Deskripsi : Verifikasi bahwa password MariaDB tidak terlihat di daftar proses yang berjalan atau di riwayat perintah shell pengguna.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.4.sh
+----------------------------------------
+Judul Audit : 2.4 Do Not Reuse Usernames
+Status : Pass
+Nilai Konfigurasi : No reused usernames detected
+Nilai CIS : Username MariaDB harus unik per aplikasi, orang, atau sistem; tidak boleh digunakan ulang
+Deskripsi : Verifikasi bahwa setiap user MariaDB unik dan tidak digunakan oleh lebih dari satu aplikasi atau entitas, untuk mengurangi risiko kompromi berantai.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.5.sh
+----------------------------------------
+Judul Audit : 2.5 Ensure Non-Default, Unique Cryptographic Material is in Use
+Status : Fail
+Nilai Konfigurasi : Server certificate not found in /etc/mysql/ssl/server-cert.pem
+Nilai CIS : MariaDB harus menggunakan material kriptografi yang unik dan tidak default
+Deskripsi : Verifikasi bahwa MariaDB menggunakan sertifikat dan kunci enkripsi unik, bukan auto-generated atau digunakan bersama di instance lain.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.6.sh
+----------------------------------------
+Judul Audit : 2.6 Ensure 'password_lifetime' is Less Than or Equal to '365'
+Status : Fail
+Nilai Konfigurasi : default_password_lifetime: Empty (variable not supported in this MariaDB version).
+Nilai CIS : Password lifetime harus <= 365 hari
+Deskripsi : Versi MariaDB ini tidak memiliki variabel default_password_lifetime. CIS merekomendasikan pengaturan masa berlaku password ≤ 365 hari, atau password tidak diatur untuk kedaluwarsa (0 = never expires).
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.7.sh
+----------------------------------------
+Judul Audit : 2.7 Lock Out Accounts if Not Currently in Use
+Status : Fail
+Nilai Konfigurasi : Empty (field not supported in this MariaDB version)
+Nilai CIS : Akun MariaDB yang tidak digunakan harus dalam status account_locked:true
+Deskripsi : Versi MariaDB ini tidak memiliki fitur account_locked atau beberapa akun belum dikunci. Semua akun yang tidak digunakan harus dikunci untuk mengurangi risiko penyalahgunaan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.8.sh
+----------------------------------------
+Judul Audit : 2.8 Ensure Socket Peer-Credential Authentication is Used Appropriately
+Status : Pass
+Nilai Konfigurasi : unix_socket plugin is not active.
+Nilai CIS : Plugin unix_socket hanya boleh digunakan bila dibutuhkan, dengan host terbatas ke localhost dan user yang diotorisasi.
+Deskripsi : Verifikasi bahwa plugin unix_socket hanya aktif ketika sesuai kebijakan, dan semua user yang menggunakannya dibatasi untuk akses lokal saja.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./2.9.sh
+----------------------------------------
+Judul Audit : 2.9 Ensure MariaDB is Bound to an IP Address
+Status : Fail
+Nilai Konfigurasi : bind_address is not restricted (value: 'empty')
+Nilai CIS : MariaDB harus dikonfigurasi untuk listen hanya pada IP tertentu, bukan pada semua interface
+Deskripsi : Verifikasi bahwa parameter 'bind_address' di MariaDB tidak kosong, bukan '*' atau '::', sehingga akses TCP/IP dibatasi hanya pada IP tertentu.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./3.10.sh
+----------------------------------------
+Judul Audit : 3.10 Ensure File Key Management Encryption Plugin files have appropriate permissions
+Status : Fail
+Nilai Konfigurasi : Plugin File Key Management Encryption tidak dikonfigurasi atau file tidak ditemukan.
+Nilai CIS : File plugin harus dimiliki oleh user dan group 'mysql' dengan permission 750 atau lebih ketat.
+Deskripsi : Memastikan file plugin penyimpanan kunci terenkripsi tidak dapat diakses oleh user yang tidak berwenang untuk menjaga keamanan data.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./3.1.sh
+----------------------------------------
+Judul Audit : 3.1 Ensure 'datadir' Has Appropriate Permissions
+Status : Fail
+Nilai Konfigurasi : datadir (/var/lib/mysql/) tidak memiliki permission drwxr-x--- dengan user dan group mysql.
+Nilai CIS : Direktori data MariaDB harus memiliki permission 'drwxr-x---' dengan user dan group 'mysql'.
+Deskripsi : Memastikan bahwa direktori data MariaDB hanya dapat diakses oleh user dan group MariaDB, untuk melindungi kerahasiaan, integritas, dan ketersediaan database.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./3.2.sh
+----------------------------------------
+Judul Audit : 3.2 Ensure 'log_bin_basename' Files Have Appropriate Permissions
+Status : Fail
+Nilai Konfigurasi : Tidak dapat menentukan log_bin_basename dari MariaDB (mungkin binary logging tidak aktif).
+Nilai CIS : Semua file binary log harus memiliki permission '-rw-rw----' dan dimiliki oleh user dan group 'mysql'.
+Deskripsi : Memastikan bahwa semua file binary log MariaDB memiliki hak akses yang benar untuk melindungi kerahasiaan, integritas, dan ketersediaan log biner.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./3.3.sh
+----------------------------------------
+Judul Audit : 3.3 Ensure 'log_error' Has Appropriate Permissions
+Status : Fail
+Nilai Konfigurasi : File log error (/var/log/mariadb/mariadb.log) tidak memiliki permission '-rw-------' dengan user dan group mysql.
+Nilai CIS : File error log MariaDB harus memiliki permission '-rw-------' dan dimiliki oleh user dan group 'mysql'.
+Deskripsi : Memastikan bahwa file error log MariaDB hanya dapat diakses oleh user dan group MariaDB, untuk melindungi kerahasiaan, integritas, dan ketersediaan log error.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./3.4.sh
+----------------------------------------
+Judul Audit : 3.4 Ensure 'slow_query_log' Has Appropriate Permissions
+Status : Pass
+Nilai Konfigurasi : Slow query log dimatikan dan tidak ada file lama.
+Nilai CIS : Slow query log harus dinonaktifkan, atau jika aktif, file harus memiliki permission '-rw-------' dan dimiliki oleh user dan group 'mysql'.
+Deskripsi : Memastikan bahwa slow query log MariaDB dilindungi dengan permission yang ketat atau dinonaktifkan jika tidak digunakan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./3.5.sh
+----------------------------------------
+Judul Audit : 3.5 Ensure 'relay_log_basename' Files Have Appropriate Permissions
+Status : Fail
+Nilai Konfigurasi : relay_log_basename tidak dikonfigurasi atau tidak ditemukan.
+Nilai CIS : File relay log harus memiliki permission '-rw-------' dan dimiliki oleh 'mysql:mysql'.
+Deskripsi : Memastikan file relay log memiliki hak akses terbatas untuk menjaga kerahasiaan, integritas, dan ketersediaan data MariaDB.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./3.6.sh
+----------------------------------------
+Judul Audit : 3.6 Ensure 'general_log_file' Has Appropriate Permissions
+Status : Pass
+Nilai Konfigurasi : General log dimatikan dan tidak ada file lama.
+Nilai CIS : General log harus dinonaktifkan, atau jika aktif, file harus memiliki permission '-rw-------' dan dimiliki oleh user dan group 'mysql'.
+Deskripsi : Memastikan bahwa general log MariaDB dilindungi dengan permission yang ketat atau dinonaktifkan jika tidak digunakan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./3.7.sh
+----------------------------------------
+Judul Audit : 3.7 Ensure SSL Key Files Have Appropriate Permissions
+Status : Pass
+Nilai Konfigurasi : MariaDB tidak menggunakan SSL/TLS, tidak ada file SSL yang perlu diperiksa.
+Nilai CIS : Semua file SSL MariaDB harus memiliki permission '-r--------' dan dimiliki oleh user dan group 'mysql'.
+Deskripsi : Memastikan file kunci SSL MariaDB hanya dapat diakses oleh user MariaDB untuk mencegah kebocoran kunci yang dapat menyebabkan serangan man-in-the-middle.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./3.8.sh
+----------------------------------------
+Judul Audit : 3.8 Ensure Plugin Directory Has Appropriate Permissions
+Status : Fail
+Nilai Konfigurasi : Direktori plugin /usr/lib64/mariadb/plugin/ tidak memiliki permission 550 atau 554 sesuai standar.
+Nilai CIS : Direktori plugin MariaDB harus memiliki permission 550 atau 554, dimiliki oleh user dan group 'mysql'.
+Deskripsi : Memastikan direktori plugin MariaDB tidak dapat dimodifikasi oleh user yang tidak berwenang, mencegah eksekusi kode berbahaya saat MariaDB dijalankan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./3.9.sh
+----------------------------------------
+Judul Audit : 3.9 Ensure 'server_audit_file_path' Has Appropriate Permissions
+Status : Fail
+Nilai Konfigurasi : server_audit_file_path tidak dikonfigurasi atau auditing tidak diaktifkan.
+Nilai CIS : File audit MariaDB harus dimiliki oleh user dan group 'mysql', dengan permission ketat (-rw-------).
+Deskripsi : Memastikan file audit MariaDB tidak dapat diakses oleh user yang tidak berwenang untuk menjaga kerahasiaan dan integritas log.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./4.1.sh
+----------------------------------------
+Judul Audit : 4.1 Ensure the Latest Security Patches are Applied
+Status : Pass
+Nilai Konfigurasi : 
+Versi MariaDB yang berjalan: 
+10.3.39-MariaDB.
+Periksa apakah ini versi terbaru dengan membandingkan ke security announcement resmi MariaDB atau update OS.
+Nilai CIS : Pastikan MariaDB diperbarui dengan security patch terbaru untuk mengurangi risiko kerentanan.
+Deskripsi : MariaDB harus selalu menggunakan versi terbaru yang telah di-patch untuk menghindari eksploitasi kerentanan yang sudah diketahui.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./4.2.sh
+----------------------------------------
+Judul Audit : 4.2 Ensure Example or Test Databases are Not Installed on Production Servers
+Status : Fail
+Nilai Konfigurasi : 
+Ditemukan database non-standar: 
+mydb
+Pastikan ini bukan database contoh atau test di production.
+Nilai CIS : Database contoh atau test tidak boleh ada di server produksi.
+Deskripsi : Menghapus database contoh akan mengurangi attack surface pada server MariaDB.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./4.3.sh
+----------------------------------------
+Judul Audit : 4.3 Ensure 'allow-suspicious-udfs' is Set to 'OFF'
+Status : Pass
+Nilai Konfigurasi : Parameter 'allow-suspicious-udfs' tidak ditemukan di konfigurasi MariaDB (status OFF).
+Nilai CIS : 'allow-suspicious-udfs' harus OFF dan tidak boleh disertakan di startup MariaDB.
+Deskripsi : Mencegah pemuatan library sembarangan sebagai UDF, mengurangi attack surface server.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./4.4.sh
+----------------------------------------
+Judul Audit : 4.4 Harden Usage for 'local_infile' on MariaDB Clients
+Status : Pass
+Nilai Konfigurasi : MariaDB client versi 10.3.39 ≥ 10.2.0, local_infile aman untuk digunakan.
+Nilai CIS : MariaDB client harus versi >= 10.2.0, atau jika < 10.2.0 maka 'local_infile' harus dimatikan (0).
+Deskripsi : Mengurangi risiko SQL injection yang bisa membaca file sensitif dari server.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./4.5.sh
+----------------------------------------
+Judul Audit : 4.5 Ensure MariaDB is Not Started With 'skip-grant-tables'
+Status : Pass
+Nilai Konfigurasi : Tidak ditemukan konfigurasi 'skip-grant-tables' atau 'skip_grant_tables' yang aktif.
+Nilai CIS : Pastikan MariaDB tidak dijalankan dengan 'skip-grant-tables' atau 'skip_grant_tables' aktif.
+Deskripsi : Jika opsi ini aktif, semua klien memiliki akses penuh ke seluruh database tanpa otentikasi.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./4.6.sh
+----------------------------------------
+Judul Audit : 4.6 Ensure Symbolic Links are Disabled
+Status : Fail
+Nilai Konfigurasi : 
+Symbolic links saat ini diaktifkan 
+(have_symlink=YES).
+Nilai CIS : Pastikan 'symbolic-links' dinonaktifkan di MariaDB.
+Deskripsi : Opsi symbolic-links memungkinkan file database diarahkan ke lokasi lain, yang dapat disalahgunakan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./4.7.sh
+----------------------------------------
+Judul Audit : 4.7 Ensure the 'secure_file_priv' is Configured Correctly
+Status : Fail
+Nilai Konfigurasi : secure_file_priv kosong (''), harus NULL atau path direktori yang valid.
+Nilai CIS : secure_file_priv harus NULL (untuk menonaktifkan) atau path direktori khusus yang aman.
+Deskripsi : Opsi ini membatasi direktori yang dapat digunakan oleh LOAD DATA INFILE atau SELECT INTO OUTFILE, untuk mengurangi risiko SQL injection yang membaca file sensitif.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./4.8.sh
+----------------------------------------
+Judul Audit : 4.8 Ensure 'sql_mode' Contains 'STRICT_ALL_TABLES'
+Status : Fail
+Nilai Konfigurasi : 
+STRICT_ALL_TABLES tidak ditemukan pada sql_mode. 
+Nilai saat ini: 
+STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
+Nilai CIS : sql_mode harus mencakup STRICT_ALL_TABLES untuk mencegah MariaDB menyesuaikan data secara diam-diam.
+Deskripsi : STRICT_ALL_TABLES memastikan MariaDB menolak data yang tidak valid atau tidak sesuai, daripada memodifikasi atau memangkas data secara otomatis.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./4.9.sh
+----------------------------------------
+Judul Audit : 4.9 Enable data-at-rest encryption in MariaDB
+Status : Fail
+Nilai Konfigurasi : Tidak ada tablespace yang dienkripsi di MariaDB.
+Nilai CIS : MariaDB harus menggunakan enkripsi data-at-rest untuk semua tablespace dan backup.
+Deskripsi : Enkripsi data-at-rest melindungi data dari akses fisik yang tidak sah dan membantu memenuhi persyaratan kepatuhan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./5.10.sh
+----------------------------------------
+Judul Audit : 5.10 Securely Define Stored Procedures and Functions DEFINER and INVOKER
+Status : FAIL
+Nilai Konfigurasi :
+
+Ditemukan DEFINER atau SECURITY_TYPE berisiko: 
+mysql	AddGeometryColumn	root@localhost	INVOKER
+mysql	DropGeometryColumn	root@localhost	INVOKER
+
+
+Daftar Stored Procedures:
+mysql	AddGeometryColumn	PROCEDURE	root@localhost	2025-07-22 14:22:07	2025-07-22 14:22:07	INVOKER		utf8	utf8_general_ci	latin1_swedish_ci
+mysql	DropGeometryColumn	PROCEDURE	root@localhost	2025-07-22 14:22:07	2025-07-22 14:22:07	INVOKER		utf8	utf8_general_ci	latin1_swedish_ci
+Daftar Stored Functions:
+Empty
+Nilai CIS : Pastikan stored procedures dan functions tidak menggunakan DEFINER dengan hak istimewa berlebih, dan INVOKER sesuai kebutuhan.
+Deskripsi : DEFINER dan INVOKER harus diperiksa untuk mencegah eskalasi hak istimewa yang tidak disengaja.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./5.1.sh
+----------------------------------------
+Judul Audit : 5.1 Ensure Only Administrative Users Have Full Database Access
+Status : Fail
+Nilai Konfigurasi : 
+Ditemukan user non-administratif dengan privileges penuh:
+'root'@'localhost'	def	SELECT	YES
+'root'@'localhost'	def	INSERT	YES
+'root'@'localhost'	def	UPDATE	YES
+'root'@'localhost'	def	DELETE	YES
+'root'@'localhost'	def	CREATE	YES
+'root'@'localhost'	def	DROP	YES
+'root'@'localhost'	def	RELOAD	YES
+'root'@'localhost'	def	SHUTDOWN	YES
+'root'@'localhost'	def	PROCESS	YES
+'root'@'localhost'	def	FILE	YES
+'root'@'localhost'	def	REFERENCES	YES
+'root'@'localhost'	def	INDEX	YES
+'root'@'localhost'	def	ALTER	YES
+'root'@'localhost'	def	SHOW DATABASES	YES
+'root'@'localhost'	def	SUPER	YES
+'root'@'localhost'	def	CREATE TEMPORARY TABLES	YES
+'root'@'localhost'	def	LOCK TABLES	YES
+'root'@'localhost'	def	EXECUTE	YES
+'root'@'localhost'	def	REPLICATION SLAVE	YES
+'root'@'localhost'	def	REPLICATION CLIENT	YES
+'root'@'localhost'	def	CREATE VIEW	YES
+'root'@'localhost'	def	SHOW VIEW	YES
+'root'@'localhost'	def	CREATE ROUTINE	YES
+'root'@'localhost'	def	ALTER ROUTINE	YES
+'root'@'localhost'	def	CREATE USER	YES
+'root'@'localhost'	def	EVENT	YES
+'root'@'localhost'	def	TRIGGER	YES
+'root'@'localhost'	def	CREATE TABLESPACE	YES
+'root'@'localhost'	def	DELETE HISTORY	YES
+'root'@'127.0.0.1'	def	SELECT	YES
+'root'@'127.0.0.1'	def	INSERT	YES
+'root'@'127.0.0.1'	def	UPDATE	YES
+'root'@'127.0.0.1'	def	DELETE	YES
+'root'@'127.0.0.1'	def	CREATE	YES
+'root'@'127.0.0.1'	def	DROP	YES
+'root'@'127.0.0.1'	def	RELOAD	YES
+'root'@'127.0.0.1'	def	SHUTDOWN	YES
+'root'@'127.0.0.1'	def	PROCESS	YES
+'root'@'127.0.0.1'	def	FILE	YES
+'root'@'127.0.0.1'	def	REFERENCES	YES
+'root'@'127.0.0.1'	def	INDEX	YES
+'root'@'127.0.0.1'	def	ALTER	YES
+'root'@'127.0.0.1'	def	SHOW DATABASES	YES
+'root'@'127.0.0.1'	def	SUPER	YES
+'root'@'127.0.0.1'	def	CREATE TEMPORARY TABLES	YES
+'root'@'127.0.0.1'	def	LOCK TABLES	YES
+'root'@'127.0.0.1'	def	EXECUTE	YES
+'root'@'127.0.0.1'	def	REPLICATION SLAVE	YES
+'root'@'127.0.0.1'	def	REPLICATION CLIENT	YES
+'root'@'127.0.0.1'	def	CREATE VIEW	YES
+'root'@'127.0.0.1'	def	SHOW VIEW	YES
+'root'@'127.0.0.1'	def	CREATE ROUTINE	YES
+'root'@'127.0.0.1'	def	ALTER ROUTINE	YES
+'root'@'127.0.0.1'	def	CREATE USER	YES
+'root'@'127.0.0.1'	def	EVENT	YES
+'root'@'127.0.0.1'	def	TRIGGER	YES
+'root'@'127.0.0.1'	def	CREATE TABLESPACE	YES
+'root'@'127.0.0.1'	def	DELETE HISTORY	YES
+'root'@'::1'	def	SELECT	YES
+'root'@'::1'	def	INSERT	YES
+'root'@'::1'	def	UPDATE	YES
+'root'@'::1'	def	DELETE	YES
+'root'@'::1'	def	CREATE	YES
+'root'@'::1'	def	DROP	YES
+'root'@'::1'	def	RELOAD	YES
+'root'@'::1'	def	SHUTDOWN	YES
+'root'@'::1'	def	PROCESS	YES
+'root'@'::1'	def	FILE	YES
+'root'@'::1'	def	REFERENCES	YES
+'root'@'::1'	def	INDEX	YES
+'root'@'::1'	def	ALTER	YES
+'root'@'::1'	def	SHOW DATABASES	YES
+'root'@'::1'	def	SUPER	YES
+'root'@'::1'	def	CREATE TEMPORARY TABLES	YES
+'root'@'::1'	def	LOCK TABLES	YES
+'root'@'::1'	def	EXECUTE	YES
+'root'@'::1'	def	REPLICATION SLAVE	YES
+'root'@'::1'	def	REPLICATION CLIENT	YES
+'root'@'::1'	def	CREATE VIEW	YES
+'root'@'::1'	def	SHOW VIEW	YES
+'root'@'::1'	def	CREATE ROUTINE	YES
+'root'@'::1'	def	ALTER ROUTINE	YES
+'root'@'::1'	def	CREATE USER	YES
+'root'@'::1'	def	EVENT	YES
+'root'@'::1'	def	TRIGGER	YES
+'root'@'::1'	def	CREATE TABLESPACE	YES
+'root'@'::1'	def	DELETE HISTORY	YES
+Nilai CIS : Hanya akun administratif yang boleh memiliki akses penuh ke database.
+Deskripsi : Membatasi akses penuh ke mysql.* melindungi kerahasiaan, integritas, dan ketersediaan data di MariaDB.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./5.2.sh
+----------------------------------------
+Judul Audit : 5.2 Ensure 'FILE' is Not Granted to Non-Administrative Users
+Status : Fail
+Nilai Konfigurasi : 
+Ditemukan user dengan privilege FILE:
+'root'@'localhost'
+'root'@'127.0.0.1'
+'root'@'::1'
+Nilai CIS : Privilege FILE hanya boleh dimiliki oleh akun administratif.
+Deskripsi : FILE privilege memberikan kemampuan untuk membaca/menulis file pada host server, yang dapat digunakan untuk mengeksploitasi MariaDB.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./5.3.sh
+----------------------------------------
+Judul Audit : 5.3 Ensure 'PROCESS' is Not Granted to Non-Administrative Users
+Status : Fail
+Nilai Konfigurasi : 
+Ditemukan user dengan privilege PROCESS:
+'root'@'localhost'
+'root'@'127.0.0.1'
+'root'@'::1'
+Nilai CIS : Privilege PROCESS hanya boleh dimiliki oleh akun administratif.
+Deskripsi : PROCESS privilege memungkinkan user melihat eksekusi statement milik session lain, termasuk yang mengandung data sensitif seperti manajemen password.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./5.4.sh
+----------------------------------------
+Judul Audit : 5.4 Ensure 'SUPER' is Not Granted to Non-Administrative Users
+Status : Fail
+Nilai Konfigurasi : 
+Ditemukan user dengan privilege SUPER:
+'root'@'localhost'
+'root'@'127.0.0.1'
+'root'@'::1'
+Nilai CIS : Privilege SUPER hanya boleh dimiliki oleh akun administratif.
+Deskripsi : SUPER privilege memungkinkan user melakukan tindakan kritis, termasuk konfigurasi server, menghentikan query milik user lain, mengubah logging, dan lainnya. Pembatasan privilege ini mengurangi risiko penyalahgunaan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./5.5.sh
+----------------------------------------
+Judul Audit : 5.5 Ensure 'SHUTDOWN' is Not Granted to Non-Administrative Users
+Status : Fail
+Nilai Konfigurasi : 
+Ditemukan user dengan privilege SHUTDOWN:
+'root'@'localhost'
+'root'@'127.0.0.1'
+'root'@'::1'
+Nilai CIS : Privilege SHUTDOWN hanya boleh dimiliki oleh akun administratif.
+Deskripsi : SHUTDOWN privilege memungkinkan user mematikan server MariaDB, yang dapat disalahgunakan untuk mengganggu ketersediaan sistem. Privilege ini harus dibatasi hanya untuk administrator.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./5.6.sh
+----------------------------------------
+Judul Audit : 5.6 Ensure 'CREATE USER' is Not Granted to Non-Administrative Users
+Status : Fail
+Nilai Konfigurasi : 
+Ditemukan user dengan privilege CREATE USER:
+'root'@'localhost'
+'root'@'127.0.0.1'
+'root'@'::1'
+Nilai CIS : Privilege CREATE USER hanya boleh dimiliki oleh akun administratif.
+Deskripsi : CREATE USER privilege memungkinkan user membuat, menghapus, dan mengubah akun user lain. Pembatasan privilege ini meminimalkan risiko penyalahgunaan hak akses.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./5.7.sh
+----------------------------------------
+Judul Audit : 5.7 Ensure 'GRANT OPTION' is Not Granted to Non-Administrative Users
+Status : Fail
+Nilai Konfigurasi : 
+Ditemukan user dengan GRANT OPTION:
+'root'@'localhost'
+'root'@'127.0.0.1'
+'root'@'::1'
+Nilai CIS : GRANT OPTION hanya boleh dimiliki oleh akun administratif.
+Deskripsi : GRANT OPTION memungkinkan user memberikan privilege tambahan kepada user lain. Membatasi hak ini mengurangi risiko eskalasi hak akses yang tidak sah.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./5.8.sh
+----------------------------------------
+Judul Audit : 5.8 Ensure 'REPLICATION SLAVE' is Not Granted to Non-Administrative Users
+Status : Fail
+Nilai Konfigurasi : 
+Ditemukan user dengan REPLICATION SLAVE privilege: 
+'root'@'localhost'
+'root'@'127.0.0.1'
+'root'@'::1'
+Nilai CIS : Hanya akun replika yang sah boleh memiliki REPLICATION SLAVE privilege.
+Deskripsi : REPLICATION SLAVE memungkinkan pengguna mengambil binlog yang berisi semua perintah perubahan data. Hak ini harus dibatasi hanya untuk akun replikasi yang diperlukan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./5.9.sh
+----------------------------------------
+Judul Audit : 5.9 Ensure DML/DDL Grants are Limited to Specific Databases and Users
+Status : Pass
+Nilai Konfigurasi : 
+Tidak ada user dengan hak DML/DDL yang tidak sesuai ditemukan.
+Nilai CIS : Hanya user yang memerlukan hak DML/DDL yang boleh memiliki privilege INSERT, SELECT, UPDATE, DELETE, DROP, CREATE, ALTER pada database yang sesuai.
+Deskripsi : Membatasi hak akses DML/DDL pada user tertentu dan database yang spesifik akan mengurangi permukaan serangan pada MariaDB.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./6.1.sh
+----------------------------------------
+Judul Audit : 6.1 Ensure 'log_error' is configured correctly
+Status : PASS
+Nilai Konfigurasi :
+log_error dikonfigurasi ke file: /var/log/mariadb/mariadb.log
+Nilai CIS : Pastikan 'log_error' diarahkan ke file dan bukan './stderr.err'.
+Deskripsi : Error log harus diaktifkan dan tidak diarahkan ke stderr untuk memastikan keamanan dan kemudahan audit.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./6.2.sh
+----------------------------------------
+Judul Audit : 6.2 Ensure Log Files are Stored on a Non-System Partition
+Status : PASS
+Nilai Konfigurasi :
+log_bin_basename disimpan di non-system partition: NULL
+Nilai CIS : Pastikan log MariaDB tidak disimpan di partisi sistem (/ , /var , /usr).
+Deskripsi : Memindahkan log MariaDB dari partisi sistem mengurangi risiko denial of service akibat habisnya ruang disk pada sistem.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./6.3.sh
+----------------------------------------
+Judul Audit : 6.3 Ensure 'log_warnings' is Set to '2'
+Status : PASS
+Nilai Konfigurasi :
+log_warnings: 2
+Nilai CIS : log_warnings harus diset ke 2 untuk mencatat error dan warning.
+Deskripsi : log_warnings mengontrol tingkat verbositas log error MariaDB, membantu mendeteksi perilaku berbahaya dengan mencatat error dan koneksi yang gagal.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./6.4.sh
+----------------------------------------
+Judul Audit : 6.4 Ensure Audit Logging Is Enabled
+Status : FAIL
+Nilai Konfigurasi :
+Audit plugin tidak terinstal atau tidak aktif.
+Nilai CIS : Audit logging harus diaktifkan untuk mencatat connect events dan (opsional) query/table events.
+Deskripsi : Audit logging membantu mengidentifikasi siapa yang mengubah apa dan kapan, serta membantu investigasi keamanan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./6.5.sh
+----------------------------------------
+Judul Audit : 6.5 Ensure the Audit Plugin Can't be Unloaded
+Status : FAIL
+Nilai Konfigurasi :
+Plugin SERVER_AUDIT tidak ditemukan atau tidak aktif.
+Nilai CIS : server_audit harus diset ke FORCE_PLUS_PERMANENT agar plugin audit tidak bisa di-unload.
+Deskripsi : Mencegah unloading plugin audit untuk memastikan semua aktivitas database tercatat di audit log.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./6.6.sh
+----------------------------------------
+Judul Audit : 6.6 Ensure Binary and Relay Logs are Encrypted
+Status : FAIL
+Nilai Konfigurasi :
+ENCRYPT_LOG: OFF
+Nilai CIS : Variabel ENCRYPT_LOG harus diset ke ON untuk memastikan binary dan relay logs terenkripsi.
+Deskripsi : Mengenkripsi binary dan relay logs melindungi data sensitif yang tersimpan dari ancaman internal maupun eksternal.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./7.1.sh
+----------------------------------------
+Judul Audit : 7.1 Disable use of the mysql_old_password plugin
+Status : PASS
+Nilai Konfigurasi :
+old_passwords: OFF
+secure_auth: ON
+
+mysql_old_password plugin dinonaktifkan. 
+old_passwords = OFF  
+secure_auth = ON.
+
+Nilai CIS :
+• old_passwords harus OFF
+• secure_auth harus ON
+Deskripsi : Menonaktifkan mysql_old_password mencegah penggunaan algoritma hash lama yang rentan dan memblokir koneksi klien yang menggunakan plugin ini.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./7.2.sh
+----------------------------------------
+Judul Audit : 7.2 Ensure Passwords are Not Stored in the Global Configuration
+Status : PASS
+Nilai Konfigurasi :
+File Konfigurasi /etc/my.cnf
+Tidak ditemukan parameter 'password' di section [client] pada /etc/my.cnf.
+Nilai CIS : Pastikan tidak ada parameter 'password' di section [client] pada file mariadb.cnf.
+Deskripsi : Menyimpan password di file konfigurasi global dapat mengakibatkan kebocoran kredensial karena file ini biasanya dapat diakses oleh semua pengguna.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./7.3.sh
+----------------------------------------
+Judul Audit : 7.3 Ensure strong authentication is utilized for all accounts
+Status : FAIL
+Nilai Konfigurasi :
+Ditemukan akun dengan autentikasi lemah: root	localhost
+root	127.0.0.1
+root	::1
+Nilai CIS : Tidak boleh ada akun yang menggunakan mysql_native_password, mysql_old_password, atau plugin kosong, kecuali untuk user 'root' dan 'mysql' yang memiliki authentication_string = 'invalid'.
+Deskripsi : Penggunaan plugin autentikasi lemah dapat menyebabkan risiko kebocoran password dan serangan Pass-the-Hash. Disarankan menggunakan plugin autentikasi yang lebih kuat seperti ed25519.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./7.4.sh
+----------------------------------------
+Judul Audit : 7.4 Ensure Password Complexity Policies are in Place
+Status : FAIL
+Nilai Konfigurasi :
+
+    * Plugin password complexity (simple_password_check atau cracklib_password_check) tidak aktif.
+    
+    * simple_password_check_minimal_length kurang dari 14.
+    
+    * cracklib_password_check_dictionary tidak diatur ke file kamus yang sesuai.
+    
+Nilai CIS :
+• simple_password_check_minimal_length harus >= 14
+• strict_password_validation harus ON
+• cracklib_password_check_dictionary harus diatur ke file kamus yang sesuai
+Deskripsi : Kebijakan password yang kuat membantu mencegah serangan brute force, dictionary, dan penggunaan password yang mudah ditebak.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./7.5.sh
+----------------------------------------
+Judul Audit : 7.5 Ensure No Users Have Wildcard Hostnames
+Status : PASS
+Nilai Konfigurasi :
+Tidak ada user dengan wildcard hostnames ('%').
+Nilai CIS : Tidak boleh ada user dengan host = '%'.
+Deskripsi : Hindari penggunaan wildcard hostnames untuk mengontrol dari lokasi mana user dapat terhubung ke database.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./7.6.sh
+----------------------------------------
+Judul Audit : 7.6 Ensure No Anonymous Accounts Exist
+Status : PASS
+Nilai Konfigurasi :
+Tidak ada akun anonim (user='').
+Nilai CIS : Tidak boleh ada akun dengan user kosong ('').
+Deskripsi : Menghapus akun anonim memastikan hanya pengguna teridentifikasi dan tepercaya yang dapat berinteraksi dengan MariaDB.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./8.1.sh
+----------------------------------------
+Judul Audit : 8.1 Ensure 'require_secure_transport' is Set to 'ON' and 'have_ssl' is Set to 'YES'
+Status : FAIL
+Nilai Konfigurasi : 
+require_secure_transport: Empty
+have_ssl: DISABLED
+
+Nilai CIS :
+- require_secure_transport harus diset ke 1 untuk memastikan koneksi tidak aman ditolak.
+- have_ssl harus diset ke YES untuk memastikan TLS diaktifkan.
+Deskripsi : Mengaktifkan SSL/TLS akan mengenkripsi lalu lintas jaringan dan memverifikasi identitas server, mencegah penyadapan dan serangan man-in-the-middle.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./8.2.sh
+----------------------------------------
+Judul Audit : 8.2 Ensure 'ssl_type' is Set to 'ANY', 'X509', or 'SPECIFIED' for All Remote Users
+Status : FAIL
+Nilai Konfigurasi : Tidak ada user remote ditemukan.
+Nilai CIS : ssl_type untuk semua user remote harus diset ke ANY, X509, atau SPECIFIED untuk memastikan SSL/TLS digunakan.
+Deskripsi : SSL/TLS mencegah penyadapan dan serangan man-in-the-middle. User tanpa pengaturan ini dapat menghubungkan tanpa enkripsi.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./8.3.sh
+----------------------------------------
+Judul Audit : 8.3 Set Maximum Connection Limits for Server and per User
+Status : FAIL
+Nilai Konfigurasi : 
+MAX_CONNECTIONS	151
+MAX_USER_CONNECTIONS	0
+
+Nilai CIS : max_connections dan max_user_connections harus dibatasi, dan setiap user harus memiliki batas koneksi untuk mengurangi risiko DoS.
+Deskripsi : Membatasi jumlah koneksi simultan pada level server dan user membantu mengurangi risiko serangan DoS akibat habisnya resource koneksi.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./9.1.sh
+----------------------------------------
+Judul Audit : 9.1 Ensure Replication Traffic is Secured
+Status : FAIL
+Nilai Konfigurasi : Master_SSL_Allowed: 'Tidak ditemukan'
+Nilai CIS : Replikasi harus menggunakan metode aman seperti private network, VPN, SSL/TLS, atau SSH Tunnel. Jika menggunakan SSL/TLS, pastikan Master_SSL_Allowed bernilai 'Yes'.
+Deskripsi : Replikasi yang aman mencegah kebocoran password dan informasi sensitif dari lalu lintas replikasi antara server MariaDB.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./9.2.sh
+----------------------------------------
+Judul Audit : 9.2 Ensure 'MASTER_SSL_VERIFY_SERVER_CERT' is enabled
+Status : FAIL
+Nilai Konfigurasi :
+Master_SSL_Verify_Server_Cert: Tidak ditemukan
+
+Nilai CIS : Pastikan pada REPLICA MariaDB 'MASTER_SSL_VERIFY_SERVER_CERT' bernilai 'Yes' untuk memverifikasi sertifikat PRIMARY.
+Deskripsi : REPLICA harus memverifikasi sertifikat PRIMARY saat menggunakan SSL/TLS untuk mencegah koneksi ke server yang tidak sah.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./9.3.sh
+----------------------------------------
+Judul Audit : 9.3 Ensure 'super_priv' is Not Set to 'Y' for Replication Users
+Status : PASS
+Nilai Konfigurasi :
+User yang diperiksa: repl
+Hasil pengecekan Super_priv:
+Tidak ada user dengan Super_priv = 'Y'
+
+Nilai CIS : Tidak boleh ada akun replika dengan 'Super_priv' diset ke 'Y'.
+Deskripsi : Membatasi hak SUPER pada user replikasi mengurangi risiko eskalasi hak istimewa dan modifikasi konfigurasi database yang tidak diinginkan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./9.4.sh
+----------------------------------------
+Judul Audit : 9.4 Ensure only approved ciphers are used for Replication
+Status : FAIL
+Nilai Konfigurasi :
+Master_SSL_Cipher: 
+Replication traffic is not using TLS or cipher is not set.
+Nilai CIS : Master_SSL_Cipher harus diatur dan tidak kosong untuk memastikan replikasi terenkripsi dengan TLS.
+Deskripsi : Memastikan replikasi menggunakan cipher TLS yang disetujui untuk melindungi data dalam perjalanan.
+-------------------------------------------------------------
+
+
+----------------------------------------
+# SCRIPT: ./9.5.sh
+----------------------------------------
+Judul Audit : 9.5 Ensure mutual TLS is enabled
+Status : FAIL
+Nilai Konfigurasi :
+Master_SSL_Cert: 
+Master_SSL_Key: 
+ssl_type untuk user replika: 
+Mutual TLS tidak dikonfigurasi dengan benar. Pastikan Replica memiliki sertifikat dan private key serta ssl_type user replikasi diset X509.
+Nilai CIS : Replica harus menyediakan sertifikat klien dan PRIMARY harus memverifikasi sertifikat untuk user replikasi (ssl_type = X509).
+Deskripsi : Mutual TLS memastikan replikasi aman dengan autentikasi dua arah antara PRIMARY dan REPLICA.
+-------------------------------------------------------------
+
+
