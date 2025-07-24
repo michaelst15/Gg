@@ -1,7 +1,7 @@
 OUTPUT_FILE="audit_results.txt"
 
 # Ambil informasi dari REPLICA
-MASTER_SSL_CERT=$(mysql -u root -p'bangtobing150420' -N -B -e "SHOW REPLICA STATUS\G" 2>/dev/null | grep -i 'Master_SSL_Cert:' | awk '{print $2}')
+MASTER_SSL_CERT=$(mysql -u root -p'bangtob150420' -N -B -e "SHOW REPLICA STATUS\G" 2>/dev/null | grep -i 'Master_SSL_Cert:' | awk '{print $2}')
 MASTER_SSL_KEY=$(mysql -u root -p'bangtob150420' -N -B -e "SHOW REPLICA STATUS\G" 2>/dev/null | grep -i 'Master_SSL_Key:' | awk '{print $2}')
 
 # Cek ssl_type untuk user replika di PRIMARY
