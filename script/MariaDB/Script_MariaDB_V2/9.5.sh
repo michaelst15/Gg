@@ -1,17 +1,28 @@
 OUTPUT_FILE="audit_results.txt"
 
 # Ambil informasi dari REPLICA
-MASTER_SSL_CERT=$(mysql -u root -p'bangtob150420' -N -B -e "SHOW REPLICA STATUS\G" 2>/dev/null | grep -i 'Master_SSL_Cert:' | awk '{print $2}')
-MASTER_SSL_KEY=$(mysql -u root -p'bangtob150420' -N -B -e "SHOW REPLICA STATUS\G" 2>/dev/null | grep -i 'Master_SSL_Key:' | awk '{print $2}')
+MASTER_SSL_CERT=$(mysql -N -B -e "SHOW REPLICA STATUS\G" 2>/dev/null | grep -i 'Master_SSL_Cert:' | awk '{print $2}')
+MASTER_SSL_KEY=$(mysql -N -B -e "SHOW REPLICA STATUS\G" 2>/dev/null | grep -i 'Master_SSL_Key:' | awk '{print $2}')
+
+# Set ke "Empty" jika kosong
+MASTER_SSL_CERT=${MASTER_SSL_CERT:-"Empty"}
+MASTER_SSL_KEY=${MASTER_SSL_KEY:-"Empty"}
 
 # Cek ssl_type untuk user replika di PRIMARY
-# Ganti 'repl' dengan nama user replikasi yang sebenarnya
-SSL_TYPE=$(mysql -u root -p'bangtob150420' -N -B -e "SELECT ssl_type FROM mysql.user WHERE user='repl';" 2>/dev/null)
+SSL_TYPE=$(mysql -N -B -e "SELECT ssl_type FROM mysql.user WHERE user='repl';" 2>/dev/null)
+SSL_TYPE=${SSL_TYPE:-"Empty"}
 
 # Tentukan PASS atau FAIL
-if [ -n "$MASTER_SSL_CERT" ] && [ -n "$MASTER_SSL_KEY" ] && [ "$SSL_TYPE" = "X509" ]; then
+if [[ "$MASTER_SSL_CERT" != "Empty" && "$MASTER_SSL_KEY" != "Empty" && "$SSL_TYPE" == "X509" ]]; then
     STATUS="PASS"
-    DETAILS="Mutual TLS aktif. Replica menggunakan sertifikat: $MASTER_SSL_CERT dan private key: $MASTER_SSL_KEY. ssl_type untuk user replika: $SSL_TYPE"
+    DETAILS="
+Mutual TLS aktif. 
+Replica menggunakan sertifikat: 
+$MASTER_SSL_CERT dan 
+private key: 
+$MASTER_SSL_KEY. 
+ssl_type untuk user replika: 
+$SSL_TYPE"
 else
     STATUS="FAIL"
     DETAILS="Mutual TLS tidak dikonfigurasi dengan benar. Pastikan Replica memiliki sertifikat dan private key serta ssl_type user replikasi diset X509."
