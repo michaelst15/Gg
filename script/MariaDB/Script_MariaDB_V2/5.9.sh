@@ -1,9 +1,12 @@
 OUTPUT_FILE="audit_results.txt"
 STATUS="Pass"
-DETAILS="Tidak ada user dengan hak DML/DDL yang tidak sesuai ditemukan."
+DETAILS="
+Tidak ada user dengan hak DML/DDL yang tidak sesuai ditemukan.
+$DML_DDL_USERS
+"
 
 # Jalankan query untuk mencari user yang memiliki DML/DDL privilege
-DML_DDL_USERS=$(mysql -u root -p'bangtob150420' -N -B -e "
+DML_DDL_USERS=$(mysql -N -B -e "
 SELECT User, Host, Db
 FROM mysql.db
 WHERE Select_priv='Y'
@@ -16,8 +19,11 @@ WHERE Select_priv='Y'
 " 2>/dev/null)
 
 if [[ -n "$DML_DDL_USERS" ]]; then
-    STATUS="Manual Review"
-    DETAILS="Ditemukan user dengan DML/DDL privilege:\n$DML_DDL_USERS\nPastikan user tersebut hanya memiliki akses pada database yang diperbolehkan."
+    STATUS="Fail"
+    DETAILS="
+Ditemukan user dengan DML/DDL privilege:
+$DML_DDL_USERS
+Pastikan user tersebut hanya memiliki akses pada database yang diperbolehkan."
 fi
 
 # Simpan hasil audit
