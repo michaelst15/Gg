@@ -40,3 +40,8 @@ done
 
 echo ""
 echo "🎉 Semua script selesai dijalankan."
+
+
+
+find . -type f -name "*.sh" -exec sed -i 's/\r$//' {} +
+
