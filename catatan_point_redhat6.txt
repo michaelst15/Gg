@@ -1,241 +1,82 @@
-1.1.21 :
+sh :
 
-Perubahan yang dilakukan :
-Menambahkan sticky bit (+t) ke semua direktori yang:
-* Memiliki permission world-writable (-0002)
-* Tapi belum memiliki sticky bit (! -1000)
+#!/bin/bash
 
-lokasi perubahan / target :
-Perubahan dilakukan pada semua direktori world-writable di seluruh mount point lokal yang ditemukan dengan df -P -l
+OLD_SERVER='kuy'
+NEW_SERVER='mike'
 
+OLD_PASS='-%3B6Y|{pgHzQ08('
+NEW_PASS='mike'
 
+export OLD_SERVER NEW_SERVER OLD_PASS NEW_PASS
 
-1.1.23 :
+find . -type f -name '*.ps1' -print0 | while IFS= read -r -d '' file; do
+  echo "Memproses: $file"
 
-Perubahan yang dilakukan :
-* Membuat konfigurasi install usb-storage /bin/true pada file /etc/modprobe.d/usb_storage.conf
-* Menghapus modul usb-storage dari kernel saat ini (jika sedang aktif) menggunakan rmmod usb-storage
+  perl -0777 -i -pe "
+    my \$oldp = quotemeta(\$ENV{OLD_PASS});
+    my \$newp = \$ENV{NEW_PASS};
+    my \$olds = quotemeta(\$ENV{OLD_SERVER});
+    my \$news = \$ENV{NEW_SERVER};
 
-lokasi perubahan / target :
-/etc/modprobe.d/usb_storage.conf
+    # Ganti server
+    s/\\b\$olds\\b/\$news/g;
 
+    # Ganti nilai setelah Password=
+    s/(?<=Password=)\$oldp(?=(;|\"|'|\\s|\$))/\$newp/ig;
 
+    # Ganti password yang diapit kutip
+    s/(?<=[\"'])\$oldp(?=[\"'])/\$newp/ig;
 
-3.3.4 :
+    # Ganti password berdiri sendiri
+    s/(?<!\\w)\$oldp(?!\\w)/\$newp/g;
+  " "$file"
 
-Perubahan yang dilakukan :
-* Menambahkan pengaturan berikut ke file konfigurasi sysctl:
-  - net.ipv4.conf.all.log_martians = 1
-  - net.ipv4.conf.default.log_martians = 1
+done
 
+echo "Selesai."
 
-lokasi perubahan / target :
-/etc/sysctl.d/99-cis-3.3.4-log_martians.conf
 
 
+ps1 :
 
 
-3.5.2 :
+# change.ps1
+# Mengganti server dan password di semua file .ps1 di folder ini dan subfolder
+# PowerShell version dari script Bash kamu
 
-Perubahan yang dilakukan :
-* Menulis konfigurasi install sctp /bin/true ke file modprobe
-* Jika modul SCTP sedang aktif, mencoba menonaktifkannya langsung dari kernel menggunakan rmmod sctp
+$OldServer = 'kuy'
+$NewServer = 'mike'
 
-lokasi perubahan / target :
-/etc/modprobe.d/sctp.conf
+$OldPass   = '-%3B6Y|{pgHzQ08('
+$NewPass   = 'mike'
 
+# Cari semua file .ps1 di folder dan subfolder
+Get-ChildItem -Path . -Filter *.ps1 -Recurse | ForEach-Object {
+    $FilePath = $_.FullName
+    Write-Host "Memproses: $FilePath"
 
+    # Baca isi file
+    $Content = Get-Content -Raw -LiteralPath $FilePath
 
+    # Ganti server (exact match, case-sensitive)
+    $PatternServer = [Regex]::Escape($OldServer)
+    $Content = [Regex]::Replace($Content, "\b$PatternServer\b", $NewServer)
 
-3.5.3 :
+    # Ganti nilai setelah Password=
+    $PatternPassEq = "(?<=Password=)" + [Regex]::Escape($OldPass) + "(?=(;|\""|'|\s|$))"
+    $Content = [Regex]::Replace($Content, $PatternPassEq, $NewPass, 'IgnoreCase')
 
-Perubahan yang dilakukan :
-* Menambahkan baris konfigurasi install rds /bin/true ke file modprobe
-* Jika modul RDS sedang aktif, mencoba menghentikannya dari kernel menggunakan rmmod rds
+    # Ganti password yang diapit kutip
+    $PatternPassQuotes = "(?<=[\""'])" + [Regex]::Escape($OldPass) + "(?=[\""'])"
+    $Content = [Regex]::Replace($Content, $PatternPassQuotes, $NewPass, 'IgnoreCase')
 
-lokasi perubahan / target :
-/etc/modprobe.d/rds.conf
+    # Ganti password berdiri sendiri
+    $PatternPassSolo = "(?<!\w)" + [Regex]::Escape($OldPass) + "(?!\w)"
+    $Content = [Regex]::Replace($Content, $PatternPassSolo, $NewPass)
 
+    # Simpan kembali file
+    Set-Content -LiteralPath $FilePath -Value $Content -Encoding UTF8
+}
 
-
-3.5.4 :
-
-Perubahan yang dilakukan :
-* Menulis konfigurasi install tipc /bin/true ke file modprobe
-* Jika modul TIPC sedang aktif, mencoba menghapusnya dari kernel menggunakan rmmod tipc
-
-lokasi perubahan / target :
-/etc/modprobe.d/tipc.conf
-
-
-
-
-4.2.1.4 :
-
-Perubahan yang dilakukan :
-* Mengatur permission default file log menjadi 0640 ( memastikan hanya pemilik dan group yang dapat membaca file log )
-
-lokasi perubahan / target :
-* /etc/rsyslog.conf
-* /etc/rsyslog.d
-
-
-
-4.2.2 :
-
-Perubahan yang dilakukan :
-* mengatur permission file log di /var/log
-
-lokasi perubahan / target :
-/var/log
-
-
-
-5.2.2 :
-
-Perubahan yang dilakukan :
-* Menambahkan use_pty ke sudoers utama
-
-lokasi perubahan / target :
-* /etc/sudoers
-* /etc/sudoers.d/*
-
-
-5.2.3 :
-
-Perubahan yang dilakukan :
-* Menambahkan Konfigurasi Defaults logfile ( /var/log/sudo.log ) ke /etc/sudoers
-* Menambahkan Konfigurasi Defaults logfile ( /var/log/sudo.log ) ke /etc/sudoers.d/*
-* Membuat dan mengatur permission file log ke 600, owner root:root di /var/log/sudo.log
-
-lokasi perubahan / target :
-* /etc/sudoers
-* /etc/sudoers.d/*
-* /var/log/sudo.log
-
-
-5.3.8 :
-
-Perubahan yang dilakukan :
-* Menghapus entri lama MaxAutTries ( jika ada )
-* Menambahkan baris MaxAuthTrie = 5 ke /etc/ssh/sshd_config
-
-lokasi perubahan / target :
-/etc/ssh/sshd_config
-
-
-
-5.3.11 :
-
-Perubahan yang dilakukan :
-* Menghapus semua baris PermitRootLogin lama dari /etc/ssh/sshd_config
-* Menambahkan baris konfigurasi PermitRootLogin = No.
-
-lokasi perubahan / target :
-/etc/ssh/sshd_config
-
-
-
-5.3.14 :
-
-Perubahan yang dilakukan :
-* Menghapus baris Ciphers lama dari /etc/ssh/sshd_config
-* Menambahkan baris konfigurasi Chiphers aes128-ctr,aes192-ctr,aes256-ctr
-
-lokasi perubahan / target :
-/etc/ssh/sshd_config
-
-
-
-5.3.16 :
-
-Perubahan yang dilakukan :
-* Menghapus entri lama KexAlgorithms pada /etc/ssh/sshd_config
-* Menambahkan entri baru KexAlgorithms diffie-hellman-group-exchange-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha256
-
-lokasi perubahan / target :
-/etc/ssh/sshd_config
-
-
-
-
-5.4.1 :
-
-
-Perubahan yang dilakukan :
-* Memastikan baris password requisite pam_cracklib.so try_first_pass retry=3 minlen=14 dcredit=-1 ucredit=-1 ocredit=-1 lcredit=-1
-  ada di file PAM
-* Jika baris pam_cracklib.so sudah ada, maka baris tersebut diganti
-* Jika belum ada, maka baris tersebut ditambahkan ke akhir file.
-
-lokasi perubahan / target :
-* /etc/pam.d/system-auth
-* /etc/pam.d/password-auth
-
-
-
-
-5.5.4 :
-
-Perubahan yang dilakukan :
-* menambahkan konfigurasi TMOUT ( TMOUT=900, readonly TMOUT, export TMOUT )
-
-lokasi perubahan / target :
-* /etc/profile.d/99-shell-timeout.sh
-* /etc/bashrc
-* /etc/profile
-
-
-
-6.1.10 :
-
-Perubahan yang dilakukan :
-* Untuk setiap file yang ada dan bukan symlink, memeriksa permission; jika world-writable (bit “other” set), maka:
-  - Menghilangkan hak tulis kategori “other” dengan chmod o-w.
-* kedua file daftar (WWFS-Files.txt & UNOWN-Files.txt) dikosongkan.
-
-lokasi perubahan / target :
-* WWFS-Files.txt
-* UNOWN-Files.txt
-
-
-
-
-6.1.12 :
-
-Perubahan yang dilakukan :
-* Jika ditemukan file dengan group ID tanpa entri grup (ungrouped) :
-  - Mengubah grup file menjadi root menggunakan chgrp root.
-
-
-lokasi perubahan / target :
-* UNGRP-Files.txt
-* WWF-Files.txt
-
-
-
-
-6.2.11 :
-
-Perubahan yang dilakukan :
-* Permission group atau others ( g+w atau 0+w ) di hapus jika di temukan
-
-
-lokasi perubahan / target :
-Semua dotfile di direktori home pengguna dari /etc/passwd
-
-
-
-
-
-
-
-
-
-
-https://mlptcare-my.sharepoint.com/:f:/g/personal/ryan_kamil_multipolar_com/EngaIC6Su2FMhOXqnvw7Be4B1Wo-T4q0BF38T7nihKg7uA?e=JtIE3q 
-
-
-
-
-
+Write-Host "Selesai."
