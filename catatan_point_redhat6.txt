@@ -1,3 +1,107 @@
+#!/bin/bash
+
+delete_dir="./delete_file"
+
+echo "🔁 Menjalankan semua file .sh di dalam folder: $delete_dir"
+
+# Cek apakah folder delete ada
+if [ ! -d "$delete_dir" ]; then
+  echo "❌ Folder delete tidak ditemukan."
+  exit 1
+fi
+
+# Cek apakah ada file .sh di dalam folder delete
+sh_files=("$delete_dir"/*.sh)
+if [ "${#sh_files[@]}" -eq 0 ]; then
+  echo "⚠️  Tidak ada file .sh ditemukan di dalam folder delete."
+  exit 0
+fi
+
+# Eksekusi satu per satu (kecuali file tertentu)
+for script in "$delete_dir"/*.sh; do
+  base_script=$(basename "$script")
+  
+  # Skip file tertentu
+  if [[ "$base_script" == "remove_^M.sh" || "$base_script" == "run_rollback.sh" ]]; then
+    echo "⏩ Melewati: $base_script"
+    continue
+  fi
+  
+  echo "🚀 Menjalankan: $script"
+  bash "$script"
+  status=$?
+  if [ $status -eq 0 ]; then
+    echo "✅ Sukses: $script"
+  else
+    echo "❌ Gagal: $script (exit code: $status)"
+  fi
+  echo "------------------------------------------"
+done
+
+echo "🎉 Selesai menjalankan semua skrip delete."
+
+
+
+
+
+#!/bin/bash
+
+rollback_dir="./rollback"
+
+echo "🔁 Menjalankan semua file .sh di dalam folder: $rollback_dir"
+
+# Cek apakah folder rollback ada
+if [ ! -d "$rollback_dir" ]; then
+  echo "❌ Folder rollback tidak ditemukan."
+  exit 1
+fi
+
+# Cek apakah ada file .sh di dalam folder rollback
+sh_files=("$rollback_dir"/*.sh)
+if [ "${#sh_files[@]}" -eq 0 ]; then
+  echo "⚠️  Tidak ada file .sh ditemukan di dalam folder rollback."
+  exit 0
+fi
+
+# Eksekusi satu per satu, skip file tertentu
+for script in "$rollback_dir"/*.sh; do
+  base_script=$(basename "$script")
+  
+  # Skip file remove_^M.sh dan run_delete_file.sh
+  if [[ "$base_script" == "remove_^M.sh" || "$base_script" == "run_delete_file.sh" ]]; then
+    echo "⏩ Melewati: $base_script"
+    continue
+  fi
+  
+  echo "🚀 Menjalankan: $script"
+  bash "$script"
+  status=$?
+  if [ $status -eq 0 ]; then
+    echo "✅ Sukses: $script"
+  else
+    echo "❌ Gagal: $script (exit code: $status)"
+  fi
+  echo "------------------------------------------"
+done
+
+echo "🎉 Selesai menjalankan semua skrip rollback."
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 sh :
 
 #!/bin/bash
