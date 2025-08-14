@@ -1,186 +1,38 @@
-#!/bin/bash
+# ===============================================
+# Cek Koneksi SQL Server 2008
+# File: cek_koneksi_sql2008.ps1
+# ===============================================
 
-delete_dir="./delete_file"
+param(
+    [string]$ServerName = "localhost",    # Nama atau IP server SQL
+    [string]$Database   = "master",       # Nama database untuk tes
+    [string]$UserName   = "",              # Kosongkan untuk Windows Authentication
+    [string]$Password   = ""               # Kosongkan untuk Windows Authentication
+)
 
-echo "🔁 Menjalankan semua file .sh di dalam folder: $delete_dir"
+Write-Host "Menguji koneksi ke SQL Server: $ServerName / Database: $Database" -ForegroundColor Cyan
 
-# Cek apakah folder delete ada
-if [ ! -d "$delete_dir" ]; then
-  echo "❌ Folder delete tidak ditemukan."
-  exit 1
-fi
+try {
+    # Tentukan connection string
+    if ([string]::IsNullOrWhiteSpace($UserName)) {
+        # Windows Authentication
+        $connectionString = "Server=$ServerName;Database=$Database;Integrated Security=True;"
+    } else {
+        # SQL Authentication
+        $connectionString = "Server=$ServerName;Database=$Database;User ID=$UserName;Password=$Password;"
+    }
 
-# Cek apakah ada file .sh di dalam folder delete
-sh_files=("$delete_dir"/*.sh)
-if [ "${#sh_files[@]}" -eq 0 ]; then
-  echo "⚠️  Tidak ada file .sh ditemukan di dalam folder delete."
-  exit 0
-fi
+    # Load library SQLClient
+    Add-Type -AssemblyName "System.Data"
 
-# Eksekusi satu per satu (kecuali file tertentu)
-for script in "$delete_dir"/*.sh; do
-  base_script=$(basename "$script")
-  
-  # Skip file tertentu
-  if [[ "$base_script" == "remove_^M.sh" || "$base_script" == "run_rollback.sh" ]]; then
-    echo "⏩ Melewati: $base_script"
-    continue
-  fi
-  
-  echo "🚀 Menjalankan: $script"
-  bash "$script"
-  status=$?
-  if [ $status -eq 0 ]; then
-    echo "✅ Sukses: $script"
-  else
-    echo "❌ Gagal: $script (exit code: $status)"
-  fi
-  echo "------------------------------------------"
-done
+    # Buat koneksi
+    $connection = New-Object System.Data.SqlClient.SqlConnection
+    $connection.ConnectionString = $connectionString
 
-echo "🎉 Selesai menjalankan semua skrip delete."
-
-
-
-
-
-#!/bin/bash
-
-rollback_dir="./rollback"
-
-echo "🔁 Menjalankan semua file .sh di dalam folder: $rollback_dir"
-
-# Cek apakah folder rollback ada
-if [ ! -d "$rollback_dir" ]; then
-  echo "❌ Folder rollback tidak ditemukan."
-  exit 1
-fi
-
-# Cek apakah ada file .sh di dalam folder rollback
-sh_files=("$rollback_dir"/*.sh)
-if [ "${#sh_files[@]}" -eq 0 ]; then
-  echo "⚠️  Tidak ada file .sh ditemukan di dalam folder rollback."
-  exit 0
-fi
-
-# Eksekusi satu per satu, skip file tertentu
-for script in "$rollback_dir"/*.sh; do
-  base_script=$(basename "$script")
-  
-  # Skip file remove_^M.sh dan run_delete_file.sh
-  if [[ "$base_script" == "remove_^M.sh" || "$base_script" == "run_delete_file.sh" ]]; then
-    echo "⏩ Melewati: $base_script"
-    continue
-  fi
-  
-  echo "🚀 Menjalankan: $script"
-  bash "$script"
-  status=$?
-  if [ $status -eq 0 ]; then
-    echo "✅ Sukses: $script"
-  else
-    echo "❌ Gagal: $script (exit code: $status)"
-  fi
-  echo "------------------------------------------"
-done
-
-echo "🎉 Selesai menjalankan semua skrip rollback."
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-sh :
-
-#!/bin/bash
-
-OLD_SERVER='kuy'
-NEW_SERVER='mike'
-
-OLD_PASS='-%3B6Y|{pgHzQ08('
-NEW_PASS='mike'
-
-export OLD_SERVER NEW_SERVER OLD_PASS NEW_PASS
-
-find . -type f -name '*.ps1' -print0 | while IFS= read -r -d '' file; do
-  echo "Memproses: $file"
-
-  perl -0777 -i -pe "
-    my \$oldp = quotemeta(\$ENV{OLD_PASS});
-    my \$newp = \$ENV{NEW_PASS};
-    my \$olds = quotemeta(\$ENV{OLD_SERVER});
-    my \$news = \$ENV{NEW_SERVER};
-
-    # Ganti server
-    s/\\b\$olds\\b/\$news/g;
-
-    # Ganti nilai setelah Password=
-    s/(?<=Password=)\$oldp(?=(;|\"|'|\\s|\$))/\$newp/ig;
-
-    # Ganti password yang diapit kutip
-    s/(?<=[\"'])\$oldp(?=[\"'])/\$newp/ig;
-
-    # Ganti password berdiri sendiri
-    s/(?<!\\w)\$oldp(?!\\w)/\$newp/g;
-  " "$file"
-
-done
-
-echo "Selesai."
-
-
-
-ps1 :
-
-
-# change.ps1
-# Mengganti server dan password di semua file .ps1 di folder ini dan subfolder
-# PowerShell version dari script Bash kamu
-
-$OldServer = 'kuy'
-$NewServer = 'mike'
-
-$OldPass   = '-%3B6Y|{pgHzQ08('
-$NewPass   = 'mike'
-
-# Cari semua file .ps1 di folder dan subfolder
-Get-ChildItem -Path . -Filter *.ps1 -Recurse | ForEach-Object {
-    $FilePath = $_.FullName
-    Write-Host "Memproses: $FilePath"
-
-    # Baca isi file
-    $Content = Get-Content -Raw -LiteralPath $FilePath
-
-    # Ganti server (exact match, case-sensitive)
-    $PatternServer = [Regex]::Escape($OldServer)
-    $Content = [Regex]::Replace($Content, "\b$PatternServer\b", $NewServer)
-
-    # Ganti nilai setelah Password=
-    $PatternPassEq = "(?<=Password=)" + [Regex]::Escape($OldPass) + "(?=(;|\""|'|\s|$))"
-    $Content = [Regex]::Replace($Content, $PatternPassEq, $NewPass, 'IgnoreCase')
-
-    # Ganti password yang diapit kutip
-    $PatternPassQuotes = "(?<=[\""'])" + [Regex]::Escape($OldPass) + "(?=[\""'])"
-    $Content = [Regex]::Replace($Content, $PatternPassQuotes, $NewPass, 'IgnoreCase')
-
-    # Ganti password berdiri sendiri
-    $PatternPassSolo = "(?<!\w)" + [Regex]::Escape($OldPass) + "(?!\w)"
-    $Content = [Regex]::Replace($Content, $PatternPassSolo, $NewPass)
-
-    # Simpan kembali file
-    Set-Content -LiteralPath $FilePath -Value $Content -Encoding UTF8
+    $connection.Open()
+    Write-Host "✅ Koneksi berhasil!" -ForegroundColor Green
+    $connection.Close()
 }
-
-Write-Host "Selesai."
+catch {
+    Write-Host "❌ Koneksi gagal: $($_.Exception.Message)" -ForegroundColor Red
+}
