@@ -1,25 +1,24 @@
 # ===============================================
-# Cek Koneksi SQL Server 2008
+# Cek Koneksi SQL Server 2008 (Tanpa Pilih DB)
 # File: cek_koneksi_sql2008.ps1
 # ===============================================
 
 param(
-    [string]$ServerName = "localhost",    # Nama atau IP server SQL
-    [string]$Database   = "master",       # Nama database untuk tes
-    [string]$UserName   = "",              # Kosongkan untuk Windows Authentication
-    [string]$Password   = ""               # Kosongkan untuk Windows Authentication
+    [string]$ServerName = "localhost",  # Nama atau IP server SQL
+    [string]$UserName   = "",            # Kosongkan untuk Windows Authentication
+    [string]$Password   = ""             # Kosongkan untuk Windows Authentication
 )
 
-Write-Host "Menguji koneksi ke SQL Server: $ServerName / Database: $Database" -ForegroundColor Cyan
+Write-Host "Menguji koneksi ke SQL Server: $ServerName" -ForegroundColor Cyan
 
 try {
     # Tentukan connection string
     if ([string]::IsNullOrWhiteSpace($UserName)) {
         # Windows Authentication
-        $connectionString = "Server=$ServerName;Database=$Database;Integrated Security=True;"
+        $connectionString = "Server=$ServerName;Integrated Security=True;"
     } else {
         # SQL Authentication
-        $connectionString = "Server=$ServerName;Database=$Database;User ID=$UserName;Password=$Password;"
+        $connectionString = "Server=$ServerName;User ID=$UserName;Password=$Password;"
     }
 
     # Load library SQLClient
