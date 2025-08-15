@@ -1,56 +1,83 @@
-# === Metadata Audit ===
-$auditName = "CIS_5.1_Maximum_Number_Of_Error_Log_Files"
-$cisExpectedValue = "Maximum number of error log files >= 12"
+# === Metadata ===
+$auditName = "CIS_7.1_SymmetricKey_Uses_AES128_Or_Higher"
+$cisExpectedValue = "Semua symmetric key di database non-sistem menggunakan AES_128, AES_192, atau AES_256"
 
-# Folder & File Output
+# Output
 $outputFolder = "C:\hardening_SQLServer2008\Audit"
 $outputFile = Join-Path $outputFolder "$auditName.txt"
+if (-not (Test-Path $outputFolder)) { New-Item -Path $outputFolder -ItemType Directory | Out-Null }
 
-if (-not (Test-Path $outputFolder)) {
-    New-Item -Path $outputFolder -ItemType Directory | Out-Null
-}
+# Koneksi SQL (gunakan sqlcmd)
+$sqlServer = "IDITG12040"
+$sqlUser   = "dbidadmin"
+$sqlPass   = "zMAaFdF9G38dER"
 
-# Query SQL
-$sqlQuery = @"
-DECLARE @NumErrorLogs INT;
-EXEC master.sys.xp_instance_regread
-    N'HKEY_LOCAL_MACHINE',
-    N'Software\Microsoft\MSSQLServer\MSSQLServer',
-    N'NumErrorLogs',
-    @NumErrorLogs OUTPUT;
-SELECT ISNULL(@NumErrorLogs, -1) AS NumberOfLogFiles;
+# 1️⃣ Ambil semua user database
+$dbListCmd = @"
+SET NOCOUNT ON;
+SELECT name FROM sys.databases WHERE database_id > 4;
 "@
 
-# Server & Login (gunakan SQL Authentication)
-$server = "IDITG12040"
-$user = "dbidadmin"
-$password = "zMAaFdF9G38dER"
-
-# Jalankan sqlcmd dan ambil output
 try {
-    $rawOutput = sqlcmd -S $server -U $user -P $password -Q $sqlQuery -h -1 -W 2>&1
+    $userDatabases = & sqlcmd -S $sqlServer -U $sqlUser -P $sqlPass -Q $dbListCmd -h -1 -W 2>&1
 } catch {
-    Write-Host "Gagal menjalankan sqlcmd: $_"
+    Write-Host "❌ Gagal menjalankan sqlcmd: $_"
     exit
 }
 
-# Ambil hanya baris yang berisi angka, lalu konversi ke int
-$numErrorLogs = $rawOutput | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+$' } | Select-Object -First 1
-$numErrorLogs = [int]$numErrorLogs
-
-# Evaluasi hasil audit
-if ($numErrorLogs -ge 12) {
-    $statusAudit = "Pass"
-    $currentValue = "Maximum number of error log files saat ini adalah $numErrorLogs, memenuhi ketentuan CIS (>= 12)."
-} elseif ($numErrorLogs -eq -1) {
-    $statusAudit = "Fail"
-    $currentValue = "Tidak ditemukan nilai konfigurasi 'NumErrorLogs' di registry SQL Server."
+# Pastikan tidak null dan buang baris kosong
+if (-not $userDatabases) {
+    $userDatabases = @()
 } else {
-    $statusAudit = "Fail"
-    $currentValue = "Maximum number of error log files saat ini adalah $numErrorLogs, kurang dari ketentuan CIS (>= 12)."
+    $userDatabases = $userDatabases | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
 }
 
-# Susun laporan
+$nonCompliantKeys = @()
+
+# 2️⃣ Loop setiap database dan cek symmetric key
+foreach ($dbName in $userDatabases) {
+    $checkKeysCmd = @"
+USE [$dbName];
+SET NOCOUNT ON;
+SELECT '$dbName' AS Database_Name, name AS Key_Name, algorithm_desc
+FROM sys.symmetric_keys
+WHERE algorithm_desc NOT IN ('AES_128','AES_192','AES_256');
+"@
+
+    try {
+        $result = & sqlcmd -S $sqlServer -U $sqlUser -P $sqlPass -Q $checkKeysCmd -s "|" -W -h -1 2>&1
+    } catch {
+        Write-Host "⚠️ Gagal memeriksa database $dbName: $_"
+        continue
+    }
+
+    if ($result) {
+        foreach ($line in $result) {
+            if ($line.Trim() -ne "") {
+                $parts = $line -split "\|"
+                if ($parts.Count -ge 3) {
+                    $nonCompliantKeys += [PSCustomObject]@{
+                        Database  = $parts[0].Trim()
+                        KeyName   = $parts[1].Trim()
+                        Algorithm = $parts[2].Trim()
+                    }
+                }
+            }
+        }
+    }
+}
+
+# 3️⃣ Evaluasi hasil
+if ($nonCompliantKeys.Count -eq 0) {
+    $statusAudit = "Pass"
+    $currentValue = "Semua symmetric key di semua database non-sistem menggunakan AES_128 atau lebih tinggi."
+} else {
+    $statusAudit = "Fail"
+    $detail = $nonCompliantKeys | Format-Table -AutoSize | Out-String
+    $currentValue = "Ditemukan symmetric key yang tidak sesuai:`n$detail"
+}
+
+# 4️⃣ Susun laporan
 $report = @"
 Judul Audit         : $auditName
 Status              : $statusAudit
@@ -58,18 +85,12 @@ Nilai Konfigurasi   : $currentValue
 Nilai Ketetapan CIS : $cisExpectedValue
 
 Deskripsi:
-SQL Server error log files harus disimpan minimal 12 file untuk mencegah kehilangan data penting akibat daur ulang log yang terlalu cepat.
+Audit ini memverifikasi bahwa semua symmetric key pada user database menggunakan algoritma AES_128, AES_192, atau AES_256.
 
-Audit:
-Query membaca nilai NumErrorLogs dari registry SQL Server menggunakan prosedur xp_instance_regread.
-
-Impact:
-Menjaga jumlah error log minimal 12 membantu menjaga rekaman peristiwa penting server dan login.
-
-Default Value:
-Default SQL Server biasanya menyimpan 6 error log files, kurang dari ketentuan CIS.
+Remediation:
+ALTER SYMMETRIC KEY <nama_key> REGENERATE WITH ALGORITHM = AES_256;
 "@
 
-# Simpan laporan
+# 5️⃣ Simpan hasil
 $report | Out-File -FilePath $outputFile -Encoding UTF8
-Write-Host "Audit selesai. Laporan tersimpan di: $outputFile"
+Write-Host "✅ Audit selesai. Laporan tersimpan di: $outputFile"
