@@ -1,37 +1,64 @@
-# ===============================================
-# Cek Koneksi SQL Server 2008 (Tanpa Pilih DB)
-# File: cek_koneksi_sql2008.ps1
-# ===============================================
+# ==============================================
+# Audit Versi SQL Server 2008 Menggunakan sqlcmd
+# File : audit_sqlversion_sqlcmd.ps1
+# ==============================================
 
-param(
-    [string]$ServerName = "localhost",  # Nama atau IP server SQL
-    [string]$UserName   = "",            # Kosongkan untuk Windows Authentication
-    [string]$Password   = ""             # Kosongkan untuk Windows Authentication
-)
+# Parameter koneksi
+$serverName = "IDITG12040"            # Nama server atau IP
+$userName   = "dbidadmin"             # User SQL
+$password   = "zMAaFdF9G38dER"        # Password SQL
 
-Write-Host "Menguji koneksi ke SQL Server: $ServerName" -ForegroundColor Cyan
+# Nilai ketetapan CIS (standar)
+$cisSPExpected      = "SP2"
+$cisVersionExpected = "10.50.4000.0"
 
+# Folder output
+$folderPath = "C:\hardening_SQLServer2008\Audit"
+if (-not (Test-Path $folderPath)) {
+    Write-Host "Membuat folder output: $folderPath"
+    New-Item -Path $folderPath -ItemType Directory | Out-Null
+}
+
+$auditName = "CIS_1.1_SQLVersion"
+$outputTxt = Join-Path $folderPath "$auditName.txt"
+
+# Perintah SQL untuk di-eksekusi
+$sqlQuery = "SET NOCOUNT ON; SELECT SERVERPROPERTY('ProductLevel') AS SP_installed, SERVERPROPERTY('ProductVersion') AS Version;"
+
+# Menjalankan sqlcmd
 try {
-    # Tentukan connection string
-    if ([string]::IsNullOrWhiteSpace($UserName)) {
-        # Windows Authentication
-        $connectionString = "Server=$ServerName;Integrated Security=True;"
+    $sqlcmdOutput = & sqlcmd -S $serverName -U $userName -P $password -Q $sqlQuery -h -1 -W
+
+    if (-not $sqlcmdOutput) {
+        Write-Host "❌ Tidak ditemukan data versi SQL Server."
+        $status = "Error"
+        $configSP = "<tidak ditemukan>"
+        $configVersion = "<tidak ditemukan>"
     } else {
-        # SQL Authentication
-        $connectionString = "Server=$ServerName;User ID=$UserName;Password=$Password;"
+        # Hasil dipisah berdasarkan spasi/tap
+        $columns = $sqlcmdOutput -split "\s+"
+        $configSP      = $columns[0]
+        $configVersion = $columns[1]
+
+        if (($configSP -eq $cisSPExpected) -and ($configVersion -eq $cisVersionExpected)) {
+            $status = "Pass"
+        } else {
+            $status = "Fail"
+        }
     }
 
-    # Load library SQLClient
-    Add-Type -AssemblyName "System.Data"
+    # Buat konten output
+    $outputContent = @"
+Judul Audit         : $auditName
+Status              : $status
+Nilai Konfigurasi   : SP_installed: $configSP; Version: $configVersion
+Nilai Ketetapan CIS : SP_installed: $cisSPExpected; Version: $cisVersionExpected
+"@
 
-    # Buat koneksi
-    $connection = New-Object System.Data.SqlClient.SqlConnection
-    $connection.ConnectionString = $connectionString
-
-    $connection.Open()
-    Write-Host "✅ Koneksi berhasil!" -ForegroundColor Green
-    $connection.Close()
+    # Simpan hasil ke file
+    $outputContent | Out-File -FilePath $outputTxt -Encoding UTF8
+    Write-Host "`n✅ File audit berhasil dibuat di: $outputTxt"
 }
 catch {
-    Write-Host "❌ Koneksi gagal: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Error "Koneksi atau eksekusi sqlcmd gagal: $_"
 }
