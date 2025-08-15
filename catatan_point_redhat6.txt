@@ -1,8 +1,8 @@
-# Audit Name dan Nilai Ketetapan CIS
-$auditName = "CIS_4.3_CHECK_POLICY_ON_For_SQL_Authenticated_Logins"
-$cisExpectedValue = "CHECK_POLICY = ON untuk semua SQL Authenticated Logins yang aktif"
+# === Metadata Audit ===
+$auditName = "CIS_5.1_Maximum_Number_Of_Error_Log_Files"
+$cisExpectedValue = "Maximum number of error log files >= 12"
 
-# Output Folder dan File
+# Folder & File Output
 $outputFolder = "C:\hardening_SQLServer2008\Audit"
 $outputFile = Join-Path $outputFolder "$auditName.txt"
 
@@ -10,58 +10,44 @@ if (-not (Test-Path $outputFolder)) {
     New-Item -Path $outputFolder -ItemType Directory | Out-Null
 }
 
-# Parameter koneksi
-$sqlServer = "IDITG12040"
-$sqlUser   = "dbidadmin"
-$sqlPass   = "zMAaFdF9G38dER"
-
-# Query untuk audit
+# Query SQL
 $sqlQuery = @"
-SET NOCOUNT ON;
-SELECT name, is_disabled
-FROM sys.sql_logins
-WHERE is_policy_checked = 0
-AND is_disabled = 0;
+DECLARE @NumErrorLogs INT;
+EXEC master.sys.xp_instance_regread
+    N'HKEY_LOCAL_MACHINE',
+    N'Software\Microsoft\MSSQLServer\MSSQLServer',
+    N'NumErrorLogs',
+    @NumErrorLogs OUTPUT;
+SELECT ISNULL(@NumErrorLogs, -1) AS NumberOfLogFiles;
 "@
 
-# Buat file sementara manual (kompatibel PowerShell 2.0)
-$tempFile = Join-Path $env:TEMP ("sql_audit_" + (Get-Random) + ".sql")
-$sqlQuery | Out-File -FilePath $tempFile -Encoding ASCII
+# Server & Login (gunakan SQL Authentication)
+$server = "IDITG12040"
+$user = "dbidadmin"
+$password = "zMAaFdF9G38dER"
 
-# Jalankan query menggunakan sqlcmd
+# Jalankan sqlcmd dan ambil output
 try {
-    $rawOutput = & sqlcmd -S $sqlServer -U $sqlUser -P $sqlPass -i $tempFile -h -1 -W 2>&1
+    $rawOutput = sqlcmd -S $server -U $user -P $password -Q $sqlQuery -h -1 -W 2>&1
 } catch {
-    Write-Host "Error menjalankan sqlcmd: $_"
+    Write-Host "Gagal menjalankan sqlcmd: $_"
     exit
-} finally {
-    if (Test-Path $tempFile) {
-        Remove-Item $tempFile -Force
-    }
 }
 
-# Parsing hasil
-$failedLogins = @()
-foreach ($line in $rawOutput) {
-    if (-not [string]::IsNullOrWhiteSpace($line) -and $line -notmatch "----") {
-        $cols = $line -split "\s{2,}"
-        if ($cols.Count -ge 2) {
-            $failedLogins += [PSCustomObject]@{
-                LoginName  = $cols[0]
-                IsDisabled = $cols[1]
-            }
-        }
-    }
-}
+# Ambil hanya baris yang berisi angka, lalu konversi ke int
+$numErrorLogs = $rawOutput | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+$' } | Select-Object -First 1
+$numErrorLogs = [int]$numErrorLogs
 
-# Susun hasil audit
-if ($failedLogins.Count -eq 0) {
+# Evaluasi hasil audit
+if ($numErrorLogs -ge 12) {
     $statusAudit = "Pass"
-    $currentValue = "Semua SQL Authenticated Logins yang aktif memiliki CHECK_POLICY = ON"
+    $currentValue = "Maximum number of error log files saat ini adalah $numErrorLogs, memenuhi ketentuan CIS (>= 12)."
+} elseif ($numErrorLogs -eq -1) {
+    $statusAudit = "Fail"
+    $currentValue = "Tidak ditemukan nilai konfigurasi 'NumErrorLogs' di registry SQL Server."
 } else {
     $statusAudit = "Fail"
-    $failedDetail = $failedLogins | Format-Table -AutoSize | Out-String
-    $currentValue = "Beberapa SQL Authenticated Logins yang aktif tidak memiliki CHECK_POLICY = ON:`n$failedDetail"
+    $currentValue = "Maximum number of error log files saat ini adalah $numErrorLogs, kurang dari ketentuan CIS (>= 12)."
 }
 
 # Susun laporan
@@ -72,16 +58,16 @@ Nilai Konfigurasi   : $currentValue
 Nilai Ketetapan CIS : $cisExpectedValue
 
 Deskripsi:
-Opsi CHECK_POLICY harus di-set ke ON untuk semua SQL Authenticated Logins yang aktif agar password login tersebut memenuhi kebijakan kompleksitas password Windows.
+SQL Server error log files harus disimpan minimal 12 file untuk mencegah kehilangan data penting akibat daur ulang log yang terlalu cepat.
 
 Audit:
-Query di atas mencari SQL Authenticated Logins yang aktif dengan CHECK_POLICY = OFF.
+Query membaca nilai NumErrorLogs dari registry SQL Server menggunakan prosedur xp_instance_regread.
 
 Impact:
-Dengan CHECK_POLICY ON, password login harus memenuhi persyaratan kompleksitas sehingga meningkatkan keamanan.
+Menjaga jumlah error log minimal 12 membantu menjaga rekaman peristiwa penting server dan login.
 
 Default Value:
-Jika tidak diatur, CHECK_POLICY biasanya OFF secara default saat membuat login lewat T-SQL.
+Default SQL Server biasanya menyimpan 6 error log files, kurang dari ketentuan CIS.
 "@
 
 # Simpan laporan
