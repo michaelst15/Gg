@@ -1,11 +1,8 @@
-# ==========================================
-# Audit Name
-$auditName = "CIS_3.9_No_LocalWindows_Groups_as_SQL_Logins"
+# Audit Name dan Nilai Ketetapan CIS
+$auditName = "CIS_4.3_CHECK_POLICY_ON_For_SQL_Authenticated_Logins"
+$cisExpectedValue = "CHECK_POLICY = ON untuk semua SQL Authenticated Logins yang aktif"
 
-# Nilai Ketetapan CIS
-$cisExpectedValue = "Disable (tidak ada local Windows group sebagai SQL Server login)"
-
-# Output folder dan file
+# Output Folder dan File
 $outputFolder = "C:\hardening_SQLServer2008\Audit"
 $outputFile = Join-Path $outputFolder "$auditName.txt"
 
@@ -14,61 +11,57 @@ if (-not (Test-Path $outputFolder)) {
 }
 
 # Parameter koneksi
-$server = "IDITG12040"
-$user = "dbidadmin"
-$password = "zMAaFdF9G38dER"
+$sqlServer = "IDITG12040"
+$sqlUser   = "dbidadmin"
+$sqlPass   = "zMAaFdF9G38dER"
 
-# Query audit
-$query = @"
+# Query untuk audit
+$sqlQuery = @"
 SET NOCOUNT ON;
-USE [master];
-SELECT pr.[name] AS LocalGroupName, pe.[permission_name], pe.[state_desc]
-FROM sys.server_principals pr
-JOIN sys.server_permissions pe
-  ON pr.[principal_id] = pe.[grantee_principal_id]
-WHERE pr.[type_desc] = 'WINDOWS_GROUP'
-AND pr.[name] LIKE CAST(SERVERPROPERTY('MachineName') AS nvarchar) + '%';
+SELECT name, is_disabled
+FROM sys.sql_logins
+WHERE is_policy_checked = 0
+AND is_disabled = 0;
 "@
 
-# Eksekusi query dengan sqlcmd
+# Buat file sementara manual (kompatibel PowerShell 2.0)
+$tempFile = Join-Path $env:TEMP ("sql_audit_" + (Get-Random) + ".sql")
+$sqlQuery | Out-File -FilePath $tempFile -Encoding ASCII
+
+# Jalankan query menggunakan sqlcmd
 try {
-    $sqlcmdOutput = sqlcmd -S $server -U $user -P $password -Q $query -W -s "|" 2>&1
-}
-catch {
-    Write-Host "Gagal menjalankan sqlcmd: $_"
+    $rawOutput = & sqlcmd -S $sqlServer -U $sqlUser -P $sqlPass -i $tempFile -h -1 -W 2>&1
+} catch {
+    Write-Host "Error menjalankan sqlcmd: $_"
     exit
-}
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Gagal menjalankan query: $sqlcmdOutput"
-    exit
-}
-
-# Parsing hasil (pastikan selalu array)
-$rows = @($sqlcmdOutput | Where-Object { 
-    $_ -and ($_ -notmatch "^-+$") -and ($_ -notmatch "LocalGroupName")
-})
-
-$count = $rows.Count
-
-if ($count -eq 0) {
-    $statusAudit = "Pass"
-    $currentValue = "0 (tidak ada local Windows group yang menjadi SQL Server login)"
-}
-else {
-    $statusAudit = "Fail"
-    $groupDetails = ""
-    foreach ($row in $rows) {
-        $cols = $row -split "\|"
-
-        # Pastikan jumlah kolom cukup sebelum Trim()
-        $groupName = if ($cols.Count -ge 1 -and $cols[0]) { $cols[0].Trim() } else { "<Tidak Ada Data>" }
-        $perm      = if ($cols.Count -ge 2 -and $cols[1]) { $cols[1].Trim() } else { "<Tidak Ada Data>" }
-        $state     = if ($cols.Count -ge 3 -and $cols[2]) { $cols[2].Trim() } else { "<Tidak Ada Data>" }
-
-        $groupDetails += "Local Group: $groupName, Permission: $perm, State: $state`n"
+} finally {
+    if (Test-Path $tempFile) {
+        Remove-Item $tempFile -Force
     }
-    $currentValue = "$count local Windows group login ditemukan:`n$groupDetails"
+}
+
+# Parsing hasil
+$failedLogins = @()
+foreach ($line in $rawOutput) {
+    if (-not [string]::IsNullOrWhiteSpace($line) -and $line -notmatch "----") {
+        $cols = $line -split "\s{2,}"
+        if ($cols.Count -ge 2) {
+            $failedLogins += [PSCustomObject]@{
+                LoginName  = $cols[0]
+                IsDisabled = $cols[1]
+            }
+        }
+    }
+}
+
+# Susun hasil audit
+if ($failedLogins.Count -eq 0) {
+    $statusAudit = "Pass"
+    $currentValue = "Semua SQL Authenticated Logins yang aktif memiliki CHECK_POLICY = ON"
+} else {
+    $statusAudit = "Fail"
+    $failedDetail = $failedLogins | Format-Table -AutoSize | Out-String
+    $currentValue = "Beberapa SQL Authenticated Logins yang aktif tidak memiliki CHECK_POLICY = ON:`n$failedDetail"
 }
 
 # Susun laporan
@@ -79,19 +72,18 @@ Nilai Konfigurasi   : $currentValue
 Nilai Ketetapan CIS : $cisExpectedValue
 
 Deskripsi:
-Local Windows groups tidak boleh digunakan sebagai SQL Server login.
-Hal ini untuk menghindari loophole dimana siapa saja dengan hak admin OS dapat menambahkan
-user ke local group dan mendapat akses ke SQL Server.
+Opsi CHECK_POLICY harus di-set ke ON untuk semua SQL Authenticated Logins yang aktif agar password login tersebut memenuhi kebijakan kompleksitas password Windows.
 
 Audit:
-Query di atas mencari local Windows group yang menjadi login SQL Server dengan prefix
-nama komputer server (MachineName).
+Query di atas mencari SQL Authenticated Logins yang aktif dengan CHECK_POLICY = OFF.
 
 Impact:
-Pastikan alternatif login AD sudah dibuat dan diberikan permission setara sebelum drop login local group.
+Dengan CHECK_POLICY ON, password login harus memenuhi persyaratan kompleksitas sehingga meningkatkan keamanan.
+
+Default Value:
+Jika tidak diatur, CHECK_POLICY biasanya OFF secara default saat membuat login lewat T-SQL.
 "@
 
-# Simpan hasil
+# Simpan laporan
 $report | Out-File -FilePath $outputFile -Encoding UTF8
-
 Write-Host "Audit selesai. Laporan tersimpan di: $outputFile"
