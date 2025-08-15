@@ -1,64 +1,97 @@
-# ==============================================
-# Audit Versi SQL Server 2008 Menggunakan sqlcmd
-# File : audit_sqlversion_sqlcmd.ps1
-# ==============================================
+# ==========================================
+# Audit Name
+$auditName = "CIS_3.9_No_LocalWindows_Groups_as_SQL_Logins"
+
+# Nilai Ketetapan CIS
+$cisExpectedValue = "Disable (tidak ada local Windows group sebagai SQL Server login)"
+
+# Output folder dan file
+$outputFolder = "C:\hardening_SQLServer2008\Audit"
+$outputFile = Join-Path $outputFolder "$auditName.txt"
+
+if (-not (Test-Path $outputFolder)) {
+    New-Item -Path $outputFolder -ItemType Directory | Out-Null
+}
 
 # Parameter koneksi
-$serverName = "IDITG12040"            # Nama server atau IP
-$userName   = "dbidadmin"             # User SQL
-$password   = "zMAaFdF9G38dER"        # Password SQL
+$server = "IDITG12040"
+$user = "dbidadmin"
+$password = "zMAaFdF9G38dER"
 
-# Nilai ketetapan CIS (standar)
-$cisSPExpected      = "SP2"
-$cisVersionExpected = "10.50.4000.0"
-
-# Folder output
-$folderPath = "C:\hardening_SQLServer2008\Audit"
-if (-not (Test-Path $folderPath)) {
-    Write-Host "Membuat folder output: $folderPath"
-    New-Item -Path $folderPath -ItemType Directory | Out-Null
-}
-
-$auditName = "CIS_1.1_SQLVersion"
-$outputTxt = Join-Path $folderPath "$auditName.txt"
-
-# Perintah SQL untuk di-eksekusi
-$sqlQuery = "SET NOCOUNT ON; SELECT SERVERPROPERTY('ProductLevel') AS SP_installed, SERVERPROPERTY('ProductVersion') AS Version;"
-
-# Menjalankan sqlcmd
-try {
-    $sqlcmdOutput = & sqlcmd -S $serverName -U $userName -P $password -Q $sqlQuery -h -1 -W
-
-    if (-not $sqlcmdOutput) {
-        Write-Host "❌ Tidak ditemukan data versi SQL Server."
-        $status = "Error"
-        $configSP = "<tidak ditemukan>"
-        $configVersion = "<tidak ditemukan>"
-    } else {
-        # Hasil dipisah berdasarkan spasi/tap
-        $columns = $sqlcmdOutput -split "\s+"
-        $configSP      = $columns[0]
-        $configVersion = $columns[1]
-
-        if (($configSP -eq $cisSPExpected) -and ($configVersion -eq $cisVersionExpected)) {
-            $status = "Pass"
-        } else {
-            $status = "Fail"
-        }
-    }
-
-    # Buat konten output
-    $outputContent = @"
-Judul Audit         : $auditName
-Status              : $status
-Nilai Konfigurasi   : SP_installed: $configSP; Version: $configVersion
-Nilai Ketetapan CIS : SP_installed: $cisSPExpected; Version: $cisVersionExpected
+# Query audit
+$query = @"
+SET NOCOUNT ON;
+USE [master];
+SELECT pr.[name] AS LocalGroupName, pe.[permission_name], pe.[state_desc]
+FROM sys.server_principals pr
+JOIN sys.server_permissions pe
+  ON pr.[principal_id] = pe.[grantee_principal_id]
+WHERE pr.[type_desc] = 'WINDOWS_GROUP'
+AND pr.[name] LIKE CAST(SERVERPROPERTY('MachineName') AS nvarchar) + '%';
 "@
 
-    # Simpan hasil ke file
-    $outputContent | Out-File -FilePath $outputTxt -Encoding UTF8
-    Write-Host "`n✅ File audit berhasil dibuat di: $outputTxt"
+# Eksekusi query dengan sqlcmd
+try {
+    $sqlcmdOutput = sqlcmd -S $server -U $user -P $password -Q $query -W -s "|" 2>&1
 }
 catch {
-    Write-Error "Koneksi atau eksekusi sqlcmd gagal: $_"
+    Write-Host "Gagal menjalankan sqlcmd: $_"
+    exit
 }
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Gagal menjalankan query: $sqlcmdOutput"
+    exit
+}
+
+# Parsing hasil (pastikan selalu array)
+$rows = @($sqlcmdOutput | Where-Object { 
+    $_ -and ($_ -notmatch "^-+$") -and ($_ -notmatch "LocalGroupName")
+})
+
+$count = $rows.Count
+
+if ($count -eq 0) {
+    $statusAudit = "Pass"
+    $currentValue = "0 (tidak ada local Windows group yang menjadi SQL Server login)"
+}
+else {
+    $statusAudit = "Fail"
+    $groupDetails = ""
+    foreach ($row in $rows) {
+        $cols = $row -split "\|"
+
+        # Pastikan jumlah kolom cukup sebelum Trim()
+        $groupName = if ($cols.Count -ge 1 -and $cols[0]) { $cols[0].Trim() } else { "<Tidak Ada Data>" }
+        $perm      = if ($cols.Count -ge 2 -and $cols[1]) { $cols[1].Trim() } else { "<Tidak Ada Data>" }
+        $state     = if ($cols.Count -ge 3 -and $cols[2]) { $cols[2].Trim() } else { "<Tidak Ada Data>" }
+
+        $groupDetails += "Local Group: $groupName, Permission: $perm, State: $state`n"
+    }
+    $currentValue = "$count local Windows group login ditemukan:`n$groupDetails"
+}
+
+# Susun laporan
+$report = @"
+Judul Audit         : $auditName
+Status              : $statusAudit
+Nilai Konfigurasi   : $currentValue
+Nilai Ketetapan CIS : $cisExpectedValue
+
+Deskripsi:
+Local Windows groups tidak boleh digunakan sebagai SQL Server login.
+Hal ini untuk menghindari loophole dimana siapa saja dengan hak admin OS dapat menambahkan
+user ke local group dan mendapat akses ke SQL Server.
+
+Audit:
+Query di atas mencari local Windows group yang menjadi login SQL Server dengan prefix
+nama komputer server (MachineName).
+
+Impact:
+Pastikan alternatif login AD sudah dibuat dan diberikan permission setara sebelum drop login local group.
+"@
+
+# Simpan hasil
+$report | Out-File -FilePath $outputFile -Encoding UTF8
+
+Write-Host "Audit selesai. Laporan tersimpan di: $outputFile"
