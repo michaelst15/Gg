@@ -1,96 +1,89 @@
-# === Metadata ===
-$auditName = "CIS_7.1_SymmetricKey_Uses_AES128_Or_Higher"
-$cisExpectedValue = "Semua symmetric key di database non-sistem menggunakan AES_128, AES_192, atau AES_256"
+script 2.2.15 :
 
-# Output
-$outputFolder = "C:\hardening_SQLServer2008\Audit"
-$outputFile = Join-Path $outputFolder "$auditName.txt"
-if (-not (Test-Path $outputFolder)) { New-Item -Path $outputFolder -ItemType Directory | Out-Null }
+#!/bin/bash
 
-# Koneksi SQL (gunakan sqlcmd)
-$sqlServer = "IDITG12040"
-$sqlUser   = "dbidadmin"
-$sqlPass   = "zMAaFdF9G38dER"
+# =================== KONFIGURASI ===================
+output_file="remediation_result.txt"
+timestamp=$(date '+%F_%T' | tr ' :' '__')
+backup_file="backup_2.2.15_telnet_server_$timestamp.txt"
 
-# 1️⃣ Ambil semua user database
-$dbListCmd = @"
-SET NOCOUNT ON;
-SELECT name FROM sys.databases WHERE database_id > 4;
-"@
+# =================== METADATA ===================
+judul="2.2.15 Ensure telnet-server is not installed (Automated)"
+applicability="Level 1 - Server\nLevel 1 - Workstation"
+description="The telnet-server package contains the telnet daemon, which accepts connections from users from other systems via the telnet protocol."
+rationale="The telnet protocol is insecure and unencrypted. The use of an unencrypted transmission medium could allow a user with access to sniff network traffic the ability to steal credentials. The ssh package provides an encrypted session and stronger security."
+remediation="Run the following command to remove the telnet-server package:\n# yum remove telnet-server"
 
-try {
-    $userDatabases = & sqlcmd -S $sqlServer -U $sqlUser -P $sqlPass -Q $dbListCmd -h -1 -W 2>&1
-} catch {
-    Write-Host "❌ Gagal menjalankan sqlcmd: $_"
-    exit
-}
+# =================== BACKUP ===================
+echo "📦 Membuat daftar paket telnet-server jika terpasang..."
+rpm -qa | grep telnet-server > "$backup_file" 2>/dev/null
+echo "✅ Backup daftar paket disimpan: $backup_file"
 
-# Pastikan tidak null dan buang baris kosong
-if (-not $userDatabases) {
-    $userDatabases = @()
-} else {
-    $userDatabases = $userDatabases | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
-}
+# =================== AUDIT & REMEDIASI ===================
+hasil_audit=""
+tindakan=""
+status_akhir=""
+file_service_diubah=""
 
-$nonCompliantKeys = @()
+if rpm -q telnet-server &>/dev/null; then
+    hasil_audit="⚠️ Paket telnet-server ditemukan di sistem."
+    tindakan="Menghapus paket telnet-server..."
+    yum -y remove telnet-server &>/dev/null
+    if rpm -q telnet-server &>/dev/null; then
+        status_akhir="⚠️ Remediasi gagal, telnet-server masih terpasang."
+    else
+        status_akhir="Sudah Diperbaiki"
+        file_service_diubah="telnet-server (paket dihapus)"
+    fi
+else
+    hasil_audit="✅ Paket telnet-server tidak ditemukan di sistem."
+    tindakan="Tidak ada tindakan diperlukan."
+    status_akhir="Sudah Sesuai"
+fi
 
-# 2️⃣ Loop setiap database dan cek symmetric key
-foreach ($dbName in $userDatabases) {
-    $checkKeysCmd = @"
-USE [$dbName];
-SET NOCOUNT ON;
-SELECT '$dbName' AS Database_Name, name AS Key_Name, algorithm_desc
-FROM sys.symmetric_keys
-WHERE algorithm_desc NOT IN ('AES_128','AES_192','AES_256');
-"@
+# =================== SIMPAN HASIL AUDIT ===================
+{
+echo "================================================================================"
+echo "🛡️ $judul"
+echo "🕒 Waktu Eksekusi: $(date)"
+echo ""
+echo "📌 Profile Applicability:"
+echo -e "$applicability"
+echo ""
+echo "📄 Description:"
+echo "$description"
+echo ""
+echo "💡 Rationale:"
+echo "$rationale"
+echo ""
+echo "🔧 Remediation:"
+echo -e "$remediation"
+echo ""
+echo "📁 Backup informasi paket disimpan di:"
+echo "- $backup_file"
+echo ""
+echo "📂 File/Service yang Diubah:"
+if [ -n "$file_service_diubah" ]; then
+    echo "- $file_service_diubah"
+else
+    echo "- Tidak ada"
+fi
+echo ""
+echo "📌 Hasil Audit:"
+echo "$hasil_audit"
+echo ""
+echo "🔧 Tindakan Remediasi:"
+echo "$tindakan"
+echo ""
+echo "🧾 Hasil Status Akhir:"
+echo "$status_akhir"
+echo ""
+echo "✅ Audit dan remediasi selesai."
+echo "================================================================================"
+echo ""
+} >> "$output_file"
 
-    try {
-        $result = & sqlcmd -S $sqlServer -U $sqlUser -P $sqlPass -Q $checkKeysCmd -s "|" -W -h -1 2>&1
-    } catch {
-        Write-Host "⚠️ Gagal memeriksa database $dbName: $_"
-        continue
-    }
-
-    if ($result) {
-        foreach ($line in $result) {
-            if ($line.Trim() -ne "") {
-                $parts = $line -split "\|"
-                if ($parts.Count -ge 3) {
-                    $nonCompliantKeys += [PSCustomObject]@{
-                        Database  = $parts[0].Trim()
-                        KeyName   = $parts[1].Trim()
-                        Algorithm = $parts[2].Trim()
-                    }
-                }
-            }
-        }
-    }
-}
-
-# 3️⃣ Evaluasi hasil
-if ($nonCompliantKeys.Count -eq 0) {
-    $statusAudit = "Pass"
-    $currentValue = "Semua symmetric key di semua database non-sistem menggunakan AES_128 atau lebih tinggi."
-} else {
-    $statusAudit = "Fail"
-    $detail = $nonCompliantKeys | Format-Table -AutoSize | Out-String
-    $currentValue = "Ditemukan symmetric key yang tidak sesuai:`n$detail"
-}
-
-# 4️⃣ Susun laporan
-$report = @"
-Judul Audit         : $auditName
-Status              : $statusAudit
-Nilai Konfigurasi   : $currentValue
-Nilai Ketetapan CIS : $cisExpectedValue
-
-Deskripsi:
-Audit ini memverifikasi bahwa semua symmetric key pada user database menggunakan algoritma AES_128, AES_192, atau AES_256.
-
-Remediation:
-ALTER SYMMETRIC KEY <nama_key> REGENERATE WITH ALGORITHM = AES_256;
-"@
-
-# 5️⃣ Simpan hasil
-$report | Out-File -FilePath $outputFile -Encoding UTF8
-Write-Host "✅ Audit selesai. Laporan tersimpan di: $outputFile"
+# =================== OUTPUT KE LAYAR ===================
+echo "$hasil_audit"
+echo "🧾 Hasil Status Akhir: $status_akhir"
+echo "📄 Hasil audit ditulis ke: $output_file"
