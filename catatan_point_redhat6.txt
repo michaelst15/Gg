@@ -1,3 +1,77 @@
+script rollback 1.1.21 :
+
+#!/bin/bash
+
+# === Konfigurasi ===
+backup_file="/home/id1bms/backup_before_stickybit.txt"
+output_file="remediation_result.txt"
+judul="Pemulihan Konfigurasi: CIS 1.1.21 Sticky Bit"
+
+# === Cek file backup ===
+if [[ ! -f "$backup_file" ]]; then
+    echo "❌ File backup tidak ditemukan: $backup_file"
+    exit 1
+fi
+
+if [[ ! -s "$backup_file" ]]; then
+    echo "⚠️  File backup kosong, tidak ada perubahan yang pernah dilakukan sebelumnya."
+    {
+    echo "================================================================================"
+    echo "$judul"
+    echo "🕒 Waktu Eksekusi: $(date)"
+    echo
+    echo "📂 File Backup yang Dicek:"
+    echo "$backup_file"
+    echo
+    echo "📋 Tindakan:"
+    echo "Tidak ada restore yang dilakukan karena file backup kosong."
+    echo
+    echo "🔎 Status Akhir:"
+    echo "⚠️ Tidak ada perubahan."
+    echo "================================================================================"
+    echo
+    } >> "$output_file"
+    exit 0
+fi
+
+# === Lakukan restore: hapus sticky bit dari direktori yang tercatat ===
+echo "♻️  Menghapus sticky bit dari direktori sesuai backup: $backup_file"
+while IFS= read -r dir; do
+    if [[ -d "$dir" ]]; then
+        chmod -t "$dir" 2>/dev/null
+    fi
+done < "$backup_file"
+
+# === Status akhir ===
+status="✅ Sticky bit berhasil dikembalikan berdasarkan file backup."
+
+# === Tulis log ke remediation_result.txt ===
+{
+echo "================================================================================"
+echo "$judul"
+echo "🕒 Waktu Eksekusi: $(date)"
+echo
+echo "📂 File Backup yang Dipakai:"
+echo "$backup_file"
+echo
+echo "📋 Tindakan:"
+echo "Sticky bit dihapus (chmod -t) dari semua direktori yang tercatat dalam backup."
+echo
+echo "🔎 Status Akhir:"
+echo "$status"
+echo "================================================================================"
+echo
+} >> "$output_file"
+
+echo "$status"
+echo "📄 Log dicatat di: $output_file"
+
+
+
+
+
+
+
 script rollback 5.5.4 :
 
 #!/bin/bash
