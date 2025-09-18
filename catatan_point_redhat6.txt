@@ -74,37 +74,33 @@ echo "📄 Log dicatat di: $output_file"
 
 script rollback 5.5.4 :
 
+
 #!/bin/bash
 
 backup_dir="/var/backups/tmout"
 output_file="remediation_result.txt"
 judul="Pemulihan Konfigurasi: CIS 5.5.4 TMOUT"
 
-# Cari file backup terbaru untuk setiap file target
-restore_files=$(ls -1t $backup_dir/*.bak.* 2>/dev/null)
-
-if [[ -z "$restore_files" ]]; then
-    echo "❌ Tidak ada file backup ditemukan di $backup_dir"
-    exit 1
-fi
+# Fungsi untuk ambil backup terlama dari file target
+get_oldest_backup() {
+    local target=$1
+    ls -1tr "$backup_dir/$target.bak."* 2>/dev/null | head -n 1
+}
 
 echo "♻️ Melakukan restore dari backup..."
-for backup_file in $restore_files; do
-    # Ambil nama file aslinya dari backup
-    original_name=$(basename "$backup_file" | sed -E 's/\.bak\.[0-9-]+//')
 
-    # Lewati jika file adalah 99-shell-timeout.sh
-    if [[ "$original_name" == "99-shell-timeout.sh" ]]; then
-        echo "⏩ Melewati restore untuk $original_name"
-        continue
-    fi
+# Daftar file yang akan dipulihkan
+files=("bashrc" "profile")
 
-    original_path="/etc/$original_name"
-
-    # Pulihkan hanya jika file backup ada
-    if [[ -f "$backup_file" ]]; then
+for fname in "${files[@]}"; do
+    backup_file=$(get_oldest_backup "$fname")
+    if [[ -n "$backup_file" && -f "$backup_file" ]]; then
+        original_path="/etc/$fname"
         cp -p "$backup_file" "$original_path"
         echo "✔️  Restore: $original_path <- $backup_file"
+        restored_files+=("$backup_file")
+    else
+        echo "⚠️ Tidak ada backup untuk $fname di $backup_dir"
     fi
 done
 
@@ -123,11 +119,13 @@ echo "==========================================================================
 echo "$judul"
 echo "🕒 Waktu Eksekusi: $(date)"
 echo
-echo "📂 Backup yang dipakai (kecuali 99-shell-timeout.sh):"
-echo "$restore_files" | grep -v "99-shell-timeout.sh" || echo "(tidak ada)"
+echo "📂 Backup yang dipakai (terlama untuk tiap file):"
+for f in "${restored_files[@]}"; do
+    echo "- $f"
+done
 echo
 echo "📋 Tindakan:"
-echo "- File konfigurasi TMOUT telah dipulihkan dari backup (kecuali 99-shell-timeout.sh)."
+echo "- File /etc/bashrc & /etc/profile dipulihkan dari backup terlama."
 echo "- File /etc/profile.d/99-shell-timeout.sh telah dihapus."
 echo "- Semua backup 99-shell-timeout.sh juga dihapus dari $backup_dir."
 echo "================================================================================"
@@ -135,3 +133,4 @@ echo
 } >> "$output_file"
 
 echo "✅ Restore selesai. Detail dicatat di $output_file"
+
