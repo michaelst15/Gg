@@ -1,62 +1,63 @@
+script rollback 5.5.4 :
+
 #!/bin/bash
 
-# === Konfigurasi ===
-conf_file="/etc/modprobe.d/usb_storage.conf"
-backup_file="/etc/modprobe.d/usb_storage.conf.bak"
+backup_dir="/var/backups/tmout"
 output_file="remediation_result.txt"
-mod_status_file="usb_module_status_before_delete.txt"
-judul="Restore & Hapus Konfigurasi USB Storage"
+judul="Pemulihan Konfigurasi: CIS 5.5.4 TMOUT"
 
-echo "📦 Memulai proses restore & hapus konfigurasi USB Storage..."
+# Cari file backup terbaru untuk setiap file target
+restore_files=$(ls -1t $backup_dir/*.bak.* 2>/dev/null)
 
-# Simpan status modul sebelum dihapus
-lsmod | grep -w "^usb_storage" > "$mod_status_file" 2>/dev/null
-if [[ -s "$mod_status_file" ]]; then
-    module_status="Aktif"
-    echo "🧩 Modul usb-storage aktif sebelum penghapusan."
-else
-    module_status="Tidak aktif"
-    echo "✅ Modul usb-storage tidak aktif sebelum penghapusan."
+if [[ -z "$restore_files" ]]; then
+    echo "❌ Tidak ada file backup ditemukan di $backup_dir"
+    exit 1
 fi
 
-# Hapus file konfigurasi
-if [[ -f "$conf_file" ]]; then
-    rm -f "$conf_file"
-    conf_status="Dihapus"
-    echo "🗑️ File konfigurasi USB Storage dihapus: $conf_file"
-else
-    conf_status="Tidak ditemukan"
-    echo "ℹ️ File konfigurasi tidak ditemukan: $conf_file"
+echo "♻️ Melakukan restore dari backup..."
+for backup_file in $restore_files; do
+    # Ambil nama file aslinya dari backup
+    original_name=$(basename "$backup_file" | sed -E 's/\.bak\.[0-9-]+//')
+
+    # Lewati jika file adalah 99-shell-timeout.sh
+    if [[ "$original_name" == "99-shell-timeout.sh" ]]; then
+        echo "⏩ Melewati restore untuk $original_name"
+        continue
+    fi
+
+    original_path="/etc/$original_name"
+
+    # Pulihkan hanya jika file backup ada
+    if [[ -f "$backup_file" ]]; then
+        cp -p "$backup_file" "$original_path"
+        echo "✔️  Restore: $original_path <- $backup_file"
+    fi
+done
+
+# Hapus file 99-shell-timeout.sh dan backup-backupnya
+if [[ -f "/etc/profile.d/99-shell-timeout.sh" ]]; then
+    rm -f "/etc/profile.d/99-shell-timeout.sh"
+    echo "🗑️  File /etc/profile.d/99-shell-timeout.sh dihapus"
 fi
 
-# Hapus backup jika ada
-if [[ -f "$backup_file" ]]; then
-    rm -f "$backup_file"
-    backup_status="Dihapus"
-    echo "🗑️ Backup konfigurasi dihapus: $backup_file"
-else
-    backup_status="Tidak ditemukan"
-    echo "ℹ️ File backup tidak ditemukan: $backup_file"
-fi
+find "$backup_dir" -type f -name "99-shell-timeout.sh.bak.*" -exec rm -f {} \;
+echo "🗑️  Semua backup 99-shell-timeout.sh dihapus dari $backup_dir"
 
-# Catat log ke file output
+# Catat log
 {
 echo "================================================================================"
 echo "$judul"
 echo "🕒 Waktu Eksekusi: $(date)"
 echo
-echo "🔧 Tindakan:"
-echo "- File konfigurasi: $conf_file -> $conf_status"
-echo "- Backup konfigurasi: $backup_file -> $backup_status"
+echo "📂 Backup yang dipakai (kecuali 99-shell-timeout.sh):"
+echo "$restore_files" | grep -v "99-shell-timeout.sh" || echo "(tidak ada)"
 echo
-echo "🔎 Status Modul Sebelum Penghapusan: $module_status"
-echo
-echo "✅ Status Akhir:"
-echo "- File konfigurasi: $conf_status"
-echo "- Backup konfigurasi: $backup_status"
-echo "- Modul usb-storage: $module_status"
+echo "📋 Tindakan:"
+echo "- File konfigurasi TMOUT telah dipulihkan dari backup (kecuali 99-shell-timeout.sh)."
+echo "- File /etc/profile.d/99-shell-timeout.sh telah dihapus."
+echo "- Semua backup 99-shell-timeout.sh juga dihapus dari $backup_dir."
 echo "================================================================================"
 echo
 } >> "$output_file"
 
-echo "📄 Log proses dicatat di: $output_file"
+echo "✅ Restore selesai. Detail dicatat di $output_file"
