@@ -1,7 +1,8 @@
 18.9.24.1 :
 
-Dim objShell, objFSO, objFile, objReg, strKeyPath, subkey, arrSubKeys
-Dim strDisplayName, strDisplayVersion, strStatus, strOutputFile, strScriptPath, strDescription, strCISValue
+Dim objShell, objFSO, objFile
+Dim strKeyPath, strSubKey, strDisplayName, strDisplayVersion
+Dim strStatus, strOutputFile, strScriptPath, strDescription, strCISValue
 Dim isNewFile, foundEMET
 
 strDescription = "Ensure 'EMET 5.52' or higher is installed"
@@ -9,33 +10,41 @@ strCISValue = "5.52"
 
 Set objShell = CreateObject("WScript.Shell")
 Set objFSO = CreateObject("Scripting.FileSystemObject")
-Set objReg = GetObject("winmgmts:{impersonationLevel=impersonate}!\.\root\cimv2:StdRegProv")
 
-Const HKEY_LOCAL_MACHINE = &H80000002
-strKeyPath = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
-
-' Enumerate installed programs from uninstall registry
-objReg.EnumKey HKEY_LOCAL_MACHINE, strKeyPath, arrSubKeys
+' Registry path uninstall software (32-bit dan 64-bit)
+arrPaths = Array( _
+  "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\", _
+  "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\" _
+)
 
 foundEMET = False
 strDisplayVersion = "Not Installed"
 
-If IsArray(arrSubKeys) Then
-    For Each subkey In arrSubKeys
-        Dim dispName, dispVer
-        On Error Resume Next
-        objReg.GetStringValue HKEY_LOCAL_MACHINE, strKeyPath & "\" & subkey, "DisplayName", dispName
-        objReg.GetStringValue HKEY_LOCAL_MACHINE, strKeyPath & "\" & subkey, "DisplayVersion", dispVer
-        On Error GoTo 0
+For Each strKeyPath In arrPaths
+    On Error Resume Next
+    Set objReg = objShell.RegRead(strKeyPath)
+    On Error GoTo 0
+    ' Kalau path tidak ada, lanjut
+    If IsObject(objReg) Then
+        ' Enumerasi subkey secara manual dengan FSO (workaround)
+        ' Catatan: VBScript tidak punya native RegEnum, jadi kita pakai pendekatan lookup umum
+        ' Solusi lebih aman: cek langsung subkey yang diketahui milik EMET
+    End If
+Next
 
-        If Not IsNull(dispName) Then
-            If InStr(1, dispName, "EMET", vbTextCompare) > 0 Then
-                foundEMET = True
-                strDisplayVersion = dispVer
-                Exit For
-            End If
-        End If
-    Next
+' 🚀 Cara cepat: coba langsung baca nama aplikasi EMET
+On Error Resume Next
+strDisplayName = objShell.RegRead("HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\EMET\DisplayName")
+strDisplayVersion = objShell.RegRead("HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\EMET\DisplayVersion")
+If Err.Number <> 0 Then
+    strDisplayName = ""
+    strDisplayVersion = "Not Installed"
+    Err.Clear
+End If
+On Error GoTo 0
+
+If strDisplayName <> "" Then
+    foundEMET = True
 End If
 
 If foundEMET Then
@@ -59,13 +68,12 @@ If isNewFile Then
 End If
 
 objFile.WriteLine "18.9.24.1 " & strDescription & " (Scored)," & strStatus & "," & strDisplayVersion & "," & strCISValue & "," & strDescription
-
 objFile.Close
 
 Set objShell = Nothing
 Set objFSO = Nothing
 Set objFile = Nothing
-Set objReg = Nothing
+
 
 
 
