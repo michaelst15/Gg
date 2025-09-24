@@ -1,136 +1,132 @@
-script rollback 1.1.21 :
+18.9.24.1 :
 
-#!/bin/bash
+Dim objShell, objFSO, objFile, objReg, strKeyPath, subkey, arrSubKeys
+Dim strDisplayName, strDisplayVersion, strStatus, strOutputFile, strScriptPath, strDescription, strCISValue
+Dim isNewFile, foundEMET
 
-# === Konfigurasi ===
-backup_file="/home/id1bms/backup_before_stickybit.txt"
-output_file="remediation_result.txt"
-judul="Pemulihan Konfigurasi: CIS 1.1.21 Sticky Bit"
+strDescription = "Ensure 'EMET 5.52' or higher is installed"
+strCISValue = "5.52"
 
-# === Cek file backup ===
-if [[ ! -f "$backup_file" ]]; then
-    echo "❌ File backup tidak ditemukan: $backup_file"
-    exit 1
-fi
+Set objShell = CreateObject("WScript.Shell")
+Set objFSO = CreateObject("Scripting.FileSystemObject")
+Set objReg = GetObject("winmgmts:{impersonationLevel=impersonate}!\.\root\default:StdRegProv")
 
-if [[ ! -s "$backup_file" ]]; then
-    echo "⚠️  File backup kosong, tidak ada perubahan yang pernah dilakukan sebelumnya."
-    {
-    echo "================================================================================"
-    echo "$judul"
-    echo "🕒 Waktu Eksekusi: $(date)"
-    echo
-    echo "📂 File Backup yang Dicek:"
-    echo "$backup_file"
-    echo
-    echo "📋 Tindakan:"
-    echo "Tidak ada restore yang dilakukan karena file backup kosong."
-    echo
-    echo "🔎 Status Akhir:"
-    echo "⚠️ Tidak ada perubahan."
-    echo "================================================================================"
-    echo
-    } >> "$output_file"
-    exit 0
-fi
+Const HKEY_LOCAL_MACHINE = &H80000002
+strKeyPath = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
 
-# === Lakukan restore: hapus sticky bit dari direktori yang tercatat ===
-echo "♻️  Menghapus sticky bit dari direktori sesuai backup: $backup_file"
-while IFS= read -r dir; do
-    if [[ -d "$dir" ]]; then
-        chmod -t "$dir" 2>/dev/null
-    fi
-done < "$backup_file"
+' Enumerate installed programs from uninstall registry
+objReg.EnumKey HKEY_LOCAL_MACHINE, strKeyPath, arrSubKeys
 
-# === Status akhir ===
-status="✅ Sticky bit berhasil dikembalikan berdasarkan file backup."
+foundEMET = False
+strDisplayVersion = "Not Installed"
 
-# === Tulis log ke remediation_result.txt ===
-{
-echo "================================================================================"
-echo "$judul"
-echo "🕒 Waktu Eksekusi: $(date)"
-echo
-echo "📂 File Backup yang Dipakai:"
-echo "$backup_file"
-echo
-echo "📋 Tindakan:"
-echo "Sticky bit dihapus (chmod -t) dari semua direktori yang tercatat dalam backup."
-echo
-echo "🔎 Status Akhir:"
-echo "$status"
-echo "================================================================================"
-echo
-} >> "$output_file"
+If IsArray(arrSubKeys) Then
+    For Each subkey In arrSubKeys
+        Dim dispName, dispVer
+        On Error Resume Next
+        objReg.GetStringValue HKEY_LOCAL_MACHINE, strKeyPath & "\" & subkey, "DisplayName", dispName
+        objReg.GetStringValue HKEY_LOCAL_MACHINE, strKeyPath & "\" & subkey, "DisplayVersion", dispVer
+        On Error GoTo 0
 
-echo "$status"
-echo "📄 Log dicatat di: $output_file"
+        If Not IsNull(dispName) Then
+            If InStr(1, dispName, "EMET", vbTextCompare) > 0 Then
+                foundEMET = True
+                strDisplayVersion = dispVer
+                Exit For
+            End If
+        End If
+    Next
+End If
 
+If foundEMET Then
+    If CDbl(strDisplayVersion) >= CDbl(strCISValue) Then
+        strStatus = "pass"
+    Else
+        strStatus = "failed"
+    End If
+Else
+    strStatus = "failed"
+End If
 
+' Output ke CSV
+strScriptPath = objFSO.GetParentFolderName(WScript.ScriptFullName)
+strOutputFile = strScriptPath & "\ServiceTicketCheck.csv"
+isNewFile = Not objFSO.FileExists(strOutputFile)
 
+Set objFile = objFSO.OpenTextFile(strOutputFile, 8, True)
+If isNewFile Then
+    objFile.WriteLine "Policy,Status,Configured Value,CIS Recommended Value,Description"
+End If
+
+objFile.WriteLine "18.9.24.1 " & strDescription & " (Scored)," & strStatus & "," & strDisplayVersion & "," & strCISValue & "," & strDescription
+
+objFile.Close
+
+Set objShell = Nothing
+Set objFSO = Nothing
+Set objFile = Nothing
+Set objReg = Nothing
 
 
 
+2.2.18 :
 
-script rollback 5.5.4 :
+Dim objShell, objFSO, objFile
+Dim strRegPath, strParameter, strValue, strStatus, strOutputFile, strCISValue, strScriptPath, strDescription
 
+' File hasil export secedit /cfg
+strRegPath = "C:\hardening_windows_2008\allskripv3\new-script\security.txt"
+strParameter = "SeCreateSymbolicLinkPrivilege"
+strCISValue = "*S-1-5-32-544,*S-1-5-83-0" ' Administrators + NT VIRTUAL MACHINE\Virtual Machines
+strDescription = "Ensure 'Create symbolic links' is set to 'Administrators, NT VIRTUAL MACHINE\Virtual Machines' (MS only) (Scored)"
 
-#!/bin/bash
+Set objFSO = CreateObject("Scripting.FileSystemObject")
+Set objShell = CreateObject("WScript.Shell")
 
-backup_dir="/var/backups/tmout"
-output_file="remediation_result.txt"
-judul="Pemulihan Konfigurasi: CIS 5.5.4 TMOUT"
+strScriptPath = objFSO.GetParentFolderName(WScript.ScriptFullName)
+strOutputFile = strScriptPath & "\ServiceTicketCheck.csv"
 
-# Fungsi untuk ambil backup terlama dari file target
-get_oldest_backup() {
-    local target=$1
-    ls -1tr "$backup_dir/$target.bak."* 2>/dev/null | head -n 1
-}
+strValue = ""
+strStatus = "failed"
 
-echo "♻️ Melakukan restore dari backup..."
+If objFSO.FileExists(strRegPath) Then
+    Set objFile = objFSO.OpenTextFile(strRegPath, 1)
+    Do Until objFile.AtEndOfStream
+        strLine = Trim(objFile.ReadLine)
+        If InStr(1, strLine, strParameter & " =", vbTextCompare) > 0 Then
+            parts = Split(strLine, "=")
+            If UBound(parts) >= 1 Then
+                strValue = Trim(parts(1))
+                ' Normalisasi: hapus spasi setelah koma
+                strValue = Replace(strValue, " ", "")
+                strCISNorm = Replace(strCISValue, " ", "")
 
-# Daftar file yang akan dipulihkan
-files=("bashrc" "profile")
+                ' Bandingkan persis urutan SIDs
+                If UCase(strValue) = UCase(strCISNorm) Then
+                    strStatus = "pass"
+                End If
+            End If
+            Exit Do
+        End If
+    Loop
+    objFile.Close
+    Set objFile = Nothing
+Else
+    strValue = "Not Configured"
+End If
 
-for fname in "${files[@]}"; do
-    backup_file=$(get_oldest_backup "$fname")
-    if [[ -n "$backup_file" && -f "$backup_file" ]]; then
-        original_path="/etc/$fname"
-        cp -p "$backup_file" "$original_path"
-        echo "✔️  Restore: $original_path <- $backup_file"
-        restored_files+=("$backup_file")
-    else
-        echo "⚠️ Tidak ada backup untuk $fname di $backup_dir"
-    fi
-done
+' Tulis ke CSV
+Dim isNewFile
+isNewFile = Not objFSO.FileExists(strOutputFile)
+Set objFile = objFSO.OpenTextFile(strOutputFile, 8, True)
 
-# Hapus file 99-shell-timeout.sh dan backup-backupnya
-if [[ -f "/etc/profile.d/99-shell-timeout.sh" ]]; then
-    rm -f "/etc/profile.d/99-shell-timeout.sh"
-    echo "🗑️  File /etc/profile.d/99-shell-timeout.sh dihapus"
-fi
+If isNewFile Then
+    objFile.WriteLine "Policy,Status,Configured Value,CIS Recommended Value,Description"
+End If
 
-find "$backup_dir" -type f -name "99-shell-timeout.sh.bak.*" -exec rm -f {} \;
-echo "🗑️  Semua backup 99-shell-timeout.sh dihapus dari $backup_dir"
+objFile.WriteLine "2.2.18 (L1) Ensure 'Create symbolic links' is set to 'Administrators, NT VIRTUAL MACHINE\Virtual Machines' (MS only) (Scored)," & strStatus & "," & strValue & "," & strCISValue & "," & strDescription
+objFile.Close
 
-# Catat log
-{
-echo "================================================================================"
-echo "$judul"
-echo "🕒 Waktu Eksekusi: $(date)"
-echo
-echo "📂 Backup yang dipakai (terlama untuk tiap file):"
-for f in "${restored_files[@]}"; do
-    echo "- $f"
-done
-echo
-echo "📋 Tindakan:"
-echo "- File /etc/bashrc & /etc/profile dipulihkan dari backup terlama."
-echo "- File /etc/profile.d/99-shell-timeout.sh telah dihapus."
-echo "- Semua backup 99-shell-timeout.sh juga dihapus dari $backup_dir."
-echo "================================================================================"
-echo
-} >> "$output_file"
-
-echo "✅ Restore selesai. Detail dicatat di $output_file"
-
+Set objShell = Nothing
+Set objFSO = Nothing
+Set objFile = Nothing
