@@ -9,7 +9,7 @@ strCISValue = "5.52"
 
 Set objShell = CreateObject("WScript.Shell")
 Set objFSO = CreateObject("Scripting.FileSystemObject")
-Set objReg = GetObject("winmgmts:{impersonationLevel=impersonate}!\.\root\default:StdRegProv")
+Set objReg = GetObject("winmgmts:{impersonationLevel=impersonate}!\.\root\cimv2:StdRegProv")
 
 Const HKEY_LOCAL_MACHINE = &H80000002
 strKeyPath = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
