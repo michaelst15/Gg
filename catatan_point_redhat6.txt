@@ -1,140 +1,52 @@
-18.9.24.1 :
-
-Dim objShell, objFSO, objFile
-Dim strKeyPath, strSubKey, strDisplayName, strDisplayVersion
-Dim strStatus, strOutputFile, strScriptPath, strDescription, strCISValue
-Dim isNewFile, foundEMET
-
-strDescription = "Ensure 'EMET 5.52' or higher is installed"
-strCISValue = "5.52"
-
-Set objShell = CreateObject("WScript.Shell")
-Set objFSO = CreateObject("Scripting.FileSystemObject")
-
-' Registry path uninstall software (32-bit dan 64-bit)
-arrPaths = Array( _
-  "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\", _
-  "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\" _
-)
-
-foundEMET = False
-strDisplayVersion = "Not Installed"
-
-For Each strKeyPath In arrPaths
-    On Error Resume Next
-    Set objReg = objShell.RegRead(strKeyPath)
-    On Error GoTo 0
-    ' Kalau path tidak ada, lanjut
-    If IsObject(objReg) Then
-        ' Enumerasi subkey secara manual dengan FSO (workaround)
-        ' Catatan: VBScript tidak punya native RegEnum, jadi kita pakai pendekatan lookup umum
-        ' Solusi lebih aman: cek langsung subkey yang diketahui milik EMET
-    End If
-Next
-
-' 🚀 Cara cepat: coba langsung baca nama aplikasi EMET
-On Error Resume Next
-strDisplayName = objShell.RegRead("HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\EMET\DisplayName")
-strDisplayVersion = objShell.RegRead("HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\EMET\DisplayVersion")
-If Err.Number <> 0 Then
-    strDisplayName = ""
-    strDisplayVersion = "Not Installed"
-    Err.Clear
-End If
-On Error GoTo 0
-
-If strDisplayName <> "" Then
-    foundEMET = True
-End If
-
-If foundEMET Then
-    If CDbl(strDisplayVersion) >= CDbl(strCISValue) Then
-        strStatus = "pass"
-    Else
-        strStatus = "failed"
-    End If
-Else
-    strStatus = "failed"
-End If
-
-' Output ke CSV
-strScriptPath = objFSO.GetParentFolderName(WScript.ScriptFullName)
-strOutputFile = strScriptPath & "\ServiceTicketCheck.csv"
-isNewFile = Not objFSO.FileExists(strOutputFile)
-
-Set objFile = objFSO.OpenTextFile(strOutputFile, 8, True)
-If isNewFile Then
-    objFile.WriteLine "Policy,Status,Configured Value,CIS Recommended Value,Description"
-End If
-
-objFile.WriteLine "18.9.24.1 " & strDescription & " (Scored)," & strStatus & "," & strDisplayVersion & "," & strCISValue & "," & strDescription
-objFile.Close
-
-Set objShell = Nothing
-Set objFSO = Nothing
-Set objFile = Nothing
-
-
-
-
-2.2.18 :
-
-Dim objShell, objFSO, objFile
-Dim strRegPath, strParameter, strValue, strStatus, strOutputFile, strCISValue, strScriptPath, strDescription
-
-' File hasil export secedit /cfg
-strRegPath = "C:\hardening_windows_2008\allskripv3\new-script\security.txt"
-strParameter = "SeCreateSymbolicLinkPrivilege"
-strCISValue = "*S-1-5-32-544,*S-1-5-83-0" ' Administrators + NT VIRTUAL MACHINE\Virtual Machines
-strDescription = "Ensure 'Create symbolic links' is set to 'Administrators, NT VIRTUAL MACHINE\Virtual Machines' (MS only) (Scored)"
-
-Set objFSO = CreateObject("Scripting.FileSystemObject")
-Set objShell = CreateObject("WScript.Shell")
-
-strScriptPath = objFSO.GetParentFolderName(WScript.ScriptFullName)
-strOutputFile = strScriptPath & "\ServiceTicketCheck.csv"
-
-strValue = ""
-strStatus = "failed"
-
-If objFSO.FileExists(strRegPath) Then
-    Set objFile = objFSO.OpenTextFile(strRegPath, 1)
-    Do Until objFile.AtEndOfStream
-        strLine = Trim(objFile.ReadLine)
-        If InStr(1, strLine, strParameter & " =", vbTextCompare) > 0 Then
-            parts = Split(strLine, "=")
-            If UBound(parts) >= 1 Then
-                strValue = Trim(parts(1))
-                ' Normalisasi: hapus spasi setelah koma
-                strValue = Replace(strValue, " ", "")
-                strCISNorm = Replace(strCISValue, " ", "")
-
-                ' Bandingkan persis urutan SIDs
-                If UCase(strValue) = UCase(strCISNorm) Then
-                    strStatus = "pass"
-                End If
-            End If
-            Exit Do
-        End If
-    Loop
-    objFile.Close
-    Set objFile = Nothing
-Else
-    strValue = "Not Configured"
-End If
-
-' Tulis ke CSV
-Dim isNewFile
-isNewFile = Not objFSO.FileExists(strOutputFile)
-Set objFile = objFSO.OpenTextFile(strOutputFile, 8, True)
-
-If isNewFile Then
-    objFile.WriteLine "Policy,Status,Configured Value,CIS Recommended Value,Description"
-End If
-
-objFile.WriteLine "2.2.18 (L1) Ensure 'Create symbolic links' is set to 'Administrators, NT VIRTUAL MACHINE\Virtual Machines' (MS only) (Scored)," & strStatus & "," & strValue & "," & strCISValue & "," & strDescription
-objFile.Close
-
-Set objShell = Nothing
-Set objFSO = Nothing
-Set objFile = Nothing
+IDITG12040
+IDITG22010
+IDITG22023
+IDITG22040
+IDITG22044
+IDITG26012
+NTIBRPID0010
+NTIBRPID00201
+NTIBRPID00301
+NTIBRPID00401
+NTIBRPID00501
+NTIBRPID00601
+NTIBRPID00701
+NTIBRPID00801
+NTIBRPID00901
+NTIBRPID01001
+NTIBRPID01301
+NTIBRPID01401
+NTIBRPID01601
+NTIBRPID01801
+NTIBRPID01901
+NTIBRPID02001
+NTIBRPID02101
+NTIBRPID02301
+NTIBRPID02601
+NTIBRPID02701
+NTIBRPID11001
+NTIBRPID12301
+NTIBRPID16601
+NTIBRPID22001
+NTIBRPID47061
+NTIBRPID68801
+NTIBRPID68901
+NTIBRPIDV0A
+NTIBRPIDV0B
+NTIBRPIDV01
+NTIBRPIDV02
+NTIBRPIDV03
+NTIBRPIDV04
+NTIBRPIDV05
+NTIBRPIDV06
+NTIBRPIDV07
+NTIBRPIDV08
+NTIBRPIDV09
+NTIBRPIDV22
+NTIBRUID06
+NTIBRUIDV01
+NTIBRUIDV02
+NTIBRUIDV03
+NTIBRUIDV04
+NTIBRUIDV05
+NTIBRUIDV22
