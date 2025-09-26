@@ -1,27 +1,15 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 
-REM Loop semua file .txt di folder ini
-for %%f in (*.txt) do (
-    echo Memproses: %%f
+REM === Loop semua file .txt di folder ini ===
+for %%F in (*.txt) do (
+    echo Memproses: %%F
 
-    REM Buat file sementara
-    > "%%f.tmp" (
-        for /f "usebackq delims=" %%l in ("%%f") do (
-            set "line=%%l"
-            REM Jika baris mengandung "Status            :" maka ganti nilainya
-            echo !line! | findstr /c:"Status            :" >nul
-            if not errorlevel 1 (
-                echo Status            : Pass
-            ) else (
-                echo !line!
-            )
-        )
-    )
-
-    REM Ganti file asli dengan hasil edit
-    move /y "%%f.tmp" "%%f" >nul
+    REM Edit langsung isi file dengan PowerShell (in-place)
+    powershell -Command ^
+        "(Get-Content '%%F') -replace '^Status\s*:.*','Status            : Pass' | Set-Content '%%F'"
 )
 
-echo Selesai.
+echo.
+echo Selesai. Semua Status sudah diubah jadi 'Pass'.
 pause
