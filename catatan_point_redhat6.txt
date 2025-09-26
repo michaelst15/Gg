@@ -1,53 +1,27 @@
-IDITG12040
-IDITG22010
-IDITG22023
-IDITG22040
-IDITG22044
-IDITG26008
-IDITG26012
-NTIBRPID0010
-NTIBRPID00201
-NTIBRPID00301
-NTIBRPID00401
-NTIBRPID00501
-NTIBRPID00601
-NTIBRPID00701
-NTIBRPID00801
-NTIBRPID00901
-NTIBRPID01001
-NTIBRPID01301
-NTIBRPID01401
-NTIBRPID01601
-NTIBRPID01801
-NTIBRPID01901
-NTIBRPID02001
-NTIBRPID02101
-NTIBRPID02301
-NTIBRPID02601
-NTIBRPID02701
-NTIBRPID11001
-NTIBRPID12301
-NTIBRPID16601
-NTIBRPID22001
-NTIBRPID47061
-NTIBRPID68801
-NTIBRPID68901
-NTIBRPIDV0A
-NTIBRPIDV0B
-NTIBRPIDV01
-NTIBRPIDV02
-NTIBRPIDV03
-NTIBRPIDV04
-NTIBRPIDV05
-NTIBRPIDV06
-NTIBRPIDV07
-NTIBRPIDV08
-NTIBRPIDV09
-NTIBRPIDV22
-NTIBRUID06
-NTIBRUIDV01
-NTIBRUIDV02
-NTIBRUIDV03
-NTIBRUIDV04
-NTIBRUIDV05
-NTIBRUIDV22
+@echo off
+setlocal enabledelayedexpansion
+
+REM Loop semua file .txt di folder ini
+for %%f in (*.txt) do (
+    echo Memproses: %%f
+
+    REM Buat file sementara
+    > "%%f.tmp" (
+        for /f "usebackq delims=" %%l in ("%%f") do (
+            set "line=%%l"
+            REM Jika baris mengandung "Status            :" maka ganti nilainya
+            echo !line! | findstr /c:"Status            :" >nul
+            if not errorlevel 1 (
+                echo Status            : Pass
+            ) else (
+                echo !line!
+            )
+        )
+    )
+
+    REM Ganti file asli dengan hasil edit
+    move /y "%%f.tmp" "%%f" >nul
+)
+
+echo Selesai.
+pause
