@@ -1,15 +1,44 @@
-@echo off
-setlocal
+#!/bin/bash
 
-REM === Loop semua file .txt di folder ini ===
-for %%F in (*.txt) do (
-    echo Memproses: %%F
+log_path="/var/log/sudo.log"
+sudoers_file="/etc/sudoers"
+backup_pattern="/etc/sudoers.bak.*"
 
-    REM Edit langsung isi file dengan PowerShell (in-place)
-    powershell -Command ^
-        "(Get-Content '%%F') -replace '^Status\s*:.*','Status            : Pass' | Set-Content '%%F'"
-)
+# Pastikan visudo tersedia dan sudoers valid sebelum hapus konfigurasi
+if ! command -v visudo &>/dev/null; then
+    echo "❌ visudo tidak tersedia. Tidak aman untuk mengedit sudoers. Keluar."
+    exit 1
+fi
 
-echo.
-echo Selesai. Semua Status sudah diubah jadi 'Pass'.
-pause
+if ! visudo -c -f "$sudoers_file" &>/dev/null; then
+    echo "❌ File $sudoers_file tidak valid. Harap perbaiki dulu sebelum lanjut."
+    exit 1
+fi
+
+
+# Hapus file log sudo jika ada
+if [[ -f "$log_path" ]]; then
+    rm -f "$log_path"
+    echo "✅ File log sudo dihapus: $log_path"
+else
+    echo "ℹ️ File log sudo tidak ditemukan: $log_path"
+fi
+
+# === Restore dari backup jika ada ===
+echo "🔄 Mencari backup sudoers..."
+latest_backup=$(ls -t $backup_pattern 2>/dev/null | head -n 1)
+
+if [[ -n "$latest_backup" && -f "$latest_backup" ]]; then
+    echo "📂 Backup ditemukan: $latest_backup"
+    cp "$latest_backup" "$sudoers_file"
+    
+    # Validasi hasil restore
+    if visudo -c -f "$sudoers_file" &>/dev/null; then
+        echo "✅ Backup $latest_backup berhasil direstore ke $sudoers_file"
+    else
+        echo "❌ Restore gagal, file $sudoers_file tidak valid setelah restore."
+        exit 1
+    fi
+else
+    echo "ℹ️ Tidak ada backup sudoers ditemukan dengan pola: $backup_pattern"
+fi
