@@ -1,1 +1,44 @@
 
+#!/bin/bash
+
+log_path="/var/log/sudo.log"
+sudoers_file="/etc/sudoers"
+
+echo "=== Remediasi: Hapus konfigurasi sudo logfile ==="
+
+# Pastikan visudo tersedia dan sudoers valid sebelum edit
+if ! command -v visudo &>/dev/null; then
+    echo "❌ visudo tidak tersedia. Tidak aman untuk mengedit sudoers. Keluar."
+    exit 1
+fi
+
+if ! visudo -c -f "$sudoers_file" &>/dev/null; then
+    echo "❌ File $sudoers_file tidak valid. Harap perbaiki dulu sebelum lanjut."
+    exit 1
+fi
+
+# Hapus baris Defaults logfile="/var/log/sudo.log"
+if grep -qE '^Defaults\s+logfile\s*=\s*"?/var/log/sudo\.log"?' "$sudoers_file"; then
+    sed -i '/^Defaults\s\+logfile\s*=\s*\"\?\/var\/log\/sudo\.log\"\?/d' "$sudoers_file"
+    echo "🧹 Baris Defaults logfile dihapus dari $sudoers_file"
+else
+    echo "ℹ️ Tidak ada baris Defaults logfile di $sudoers_file"
+fi
+
+# Validasi setelah penghapusan
+if visudo -c -f "$sudoers_file" &>/dev/null; then
+    echo "✅ Validasi sukses: $sudoers_file valid setelah penghapusan."
+else
+    echo "❌ Validasi gagal setelah penghapusan. Harap periksa manual file sudoers!"
+    exit 1
+fi
+
+# Hapus file log jika ada
+if [[ -f "$log_path" ]]; then
+    rm -f "$log_path"
+    echo "🗑️ File log sudo dihapus: $log_path"
+else
+    echo "ℹ️ File log sudo tidak ditemukan: $log_path"
+fi
+
+echo "✅ Remediasi selesai tanpa backup dan tanpa restore."
