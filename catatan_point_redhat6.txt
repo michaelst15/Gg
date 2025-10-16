@@ -1,44 +1,58 @@
-
 #!/bin/bash
 
-log_path="/var/log/sudo.log"
+# === Konfigurasi ===
+output_file="remediation_result.txt"
+judul="Pemulihan Konfigurasi: CIS 5.2.2 Ensure sudo commands use pty"
 sudoers_file="/etc/sudoers"
 
-echo "=== Remediasi: Hapus konfigurasi sudo logfile ==="
+# === Awal eksekusi ===
+{
+    echo "================================================================================"
+    echo "$judul"
+    echo "🕒 Waktu Eksekusi: $(date)"
+    echo
+    echo "📋 Tindakan:"
+} >> "$output_file"
 
-# Pastikan visudo tersedia dan sudoers valid sebelum edit
-if ! command -v visudo &>/dev/null; then
-    echo "❌ visudo tidak tersedia. Tidak aman untuk mengedit sudoers. Keluar."
-    exit 1
-fi
-
-if ! visudo -c -f "$sudoers_file" &>/dev/null; then
-    echo "❌ File $sudoers_file tidak valid. Harap perbaiki dulu sebelum lanjut."
-    exit 1
-fi
-
-# Hapus baris Defaults logfile="/var/log/sudo.log"
-if grep -qE '^Defaults\s+logfile\s*=\s*"?/var/log/sudo\.log"?' "$sudoers_file"; then
-    sed -i '/^Defaults\s\+logfile\s*=\s*\"\?\/var\/log\/sudo\.log\"\?/d' "$sudoers_file"
-    echo "🧹 Baris Defaults logfile dihapus dari $sudoers_file"
+# === 1. Hapus entri 'Defaults use_pty' dari /etc/sudoers ===
+if grep -Eq '^\s*Defaults\s+.*\buse_pty\b' "$sudoers_file"; then
+    cp -p "$sudoers_file" "${sudoers_file}.bak_$(date +%Y%m%d%H%M%S)"
+    sed -i '/^\s*Defaults\s\+.*\buse_pty\b/d' "$sudoers_file"
+    if visudo -cf "$sudoers_file" >/dev/null 2>&1; then
+        echo "- Baris 'Defaults use_pty' dihapus dari $sudoers_file" >> "$output_file"
+    else
+        echo "❌ Kesalahan validasi sudoers! Memulihkan dari backup..." >> "$output_file"
+        cp -p "${sudoers_file}.bak_$(date +%Y%m%d%H%M%S)" "$sudoers_file"
+    fi
 else
-    echo "ℹ️ Tidak ada baris Defaults logfile di $sudoers_file"
+    echo "- Tidak ditemukan entri 'Defaults use_pty' di $sudoers_file" >> "$output_file"
 fi
 
-# Validasi setelah penghapusan
-if visudo -c -f "$sudoers_file" &>/dev/null; then
-    echo "✅ Validasi sukses: $sudoers_file valid setelah penghapusan."
+# === 2. Hapus dari /etc/sudoers.d/ ===
+restored_d_files=()
+for file in /etc/sudoers.d/*; do
+    [[ -f "$file" ]] || continue
+    if grep -Eq '^\s*Defaults\s+.*\buse_pty\b' "$file"; then
+        sed -i '/^\s*Defaults\s\+.*\buse_pty\b/d' "$file"
+        restored_d_files+=("$file")
+    fi
+done
+
+if ((${#restored_d_files[@]})); then
+    echo "- Entri 'Defaults use_pty' juga dihapus dari file:" >> "$output_file"
+    for f in "${restored_d_files[@]}"; do
+        echo "  - $f" >> "$output_file"
+    done
 else
-    echo "❌ Validasi gagal setelah penghapusan. Harap periksa manual file sudoers!"
-    exit 1
+    echo "- Tidak ada entri 'Defaults use_pty' di /etc/sudoers.d/" >> "$output_file"
 fi
 
-# Hapus file log jika ada
-if [[ -f "$log_path" ]]; then
-    rm -f "$log_path"
-    echo "🗑️ File log sudo dihapus: $log_path"
-else
-    echo "ℹ️ File log sudo tidak ditemukan: $log_path"
-fi
+# === 3. Akhiri log ===
+{
+    echo
+    echo "🔎 Status Akhir: Sudah Diperbaiki"
+    echo "================================================================================"
+    echo
+} >> "$output_file"
 
-echo "✅ Remediasi selesai tanpa backup dan tanpa restore."
+echo "✅ Pemulihan selesai. Log dicatat di: $output_file"
